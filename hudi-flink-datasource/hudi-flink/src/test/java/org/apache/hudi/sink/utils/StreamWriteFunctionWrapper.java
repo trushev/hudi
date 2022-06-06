@@ -48,6 +48,8 @@ import org.apache.flink.streaming.api.operators.collect.utils.MockOperatorEventG
 import org.apache.flink.streaming.util.MockStreamTask;
 import org.apache.flink.streaming.util.MockStreamTaskBuilder;
 import org.apache.flink.table.data.RowData;
+import org.apache.flink.table.types.logical.RowType;
+import org.apache.flink.table.types.logical.utils.LogicalTypeParser;
 import org.apache.flink.util.Collector;
 
 import java.util.HashSet;
@@ -133,7 +135,8 @@ public class StreamWriteFunctionWrapper<I> implements TestFunctionWrapper<I> {
   public void openFunction() throws Exception {
     this.coordinator.start();
     this.coordinator.setExecutor(new MockCoordinatorExecutor(coordinatorContext));
-    toHoodieFunction = new RowDataToHoodieFunction<>(TestConfigurations.ROW_TYPE, conf);
+    RowType rowType = (RowType) LogicalTypeParser.parse(conf.getString(TestConfigurations.ROW_TYPE_OPTION));
+    toHoodieFunction = new RowDataToHoodieFunction<>(rowType, conf);
     toHoodieFunction.setRuntimeContext(runtimeContext);
     toHoodieFunction.open(conf);
 

@@ -18,7 +18,17 @@
 
 package org.apache.hudi.table.format.cow;
 
+import org.apache.flink.table.types.logical.LogicalType;
 import org.apache.hudi.common.fs.FSUtils;
+import org.apache.hudi.common.table.HoodieTableMetaClient;
+import org.apache.hudi.common.util.InternalSchemaCache;
+import org.apache.hudi.common.util.Option;
+import org.apache.hudi.internal.schema.InternalSchema;
+import org.apache.hudi.internal.schema.Types;
+import org.apache.hudi.internal.schema.action.InternalSchemaMerger;
+import org.apache.hudi.internal.schema.convert.AvroInternalSchemaConverter;
+import org.apache.hudi.table.format.CastMap;
+import org.apache.hudi.table.format.SchemaEvolutionContext;
 import org.apache.hudi.table.format.cow.vector.reader.ParquetColumnarRowSplitReader;
 
 import org.apache.flink.api.common.io.FileInputFormat;
@@ -28,6 +38,7 @@ import org.apache.flink.api.common.io.compression.InflaterInputStreamFactory;
 import org.apache.flink.core.fs.FileInputSplit;
 import org.apache.flink.core.fs.Path;
 import org.apache.flink.formats.parquet.utils.SerializableConfiguration;
+import org.apache.flink.table.data.ColumnarRowData;
 import org.apache.flink.table.data.RowData;
 import org.apache.flink.table.types.DataType;
 import org.apache.flink.table.utils.PartitionPathUtils;
@@ -35,6 +46,9 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.BlockLocation;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
+import org.apache.hudi.util.AvroSchemaConverter;
+import org.apache.hudi.util.RowDataCastProjection;
+import org.apache.hudi.util.RowDataProjection;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -46,9 +60,12 @@ import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Set;
+import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
 import static org.apache.flink.table.data.vector.VectorizedColumnBatch.DEFAULT_SIZE;
 import static org.apache.flink.table.filesystem.RowPartitionComputer.restorePartValueFromType;
+import static org.apache.hudi.common.model.HoodieRecord.HOODIE_META_COLUMNS;
 
 /**
  * An implementation of {@link FileInputFormat} to read {@link RowData} records
@@ -75,9 +92,11 @@ public class CopyOnWriteInputFormat extends FileInputFormat<RowData> {
   private final boolean utcTimestamp;
   private final SerializableConfiguration conf;
   private final long limit;
+  private Option<RowDataProjection> projection;
 
   private transient ParquetColumnarRowSplitReader reader;
   private transient long currentReadCount;
+  private final SchemaEvolutionContext schemaEvolutionContext;
 
   /**
    * Files filter for determining what files/directories should be included.
@@ -91,6 +110,7 @@ public class CopyOnWriteInputFormat extends FileInputFormat<RowData> {
       int[] selectedFields,
       String partDefaultName,
       long limit,
+      org.apache.flink.configuration.Configuration flinkConf,
       Configuration conf,
       boolean utcTimestamp) {
     super.setFilePaths(paths);
@@ -101,10 +121,52 @@ public class CopyOnWriteInputFormat extends FileInputFormat<RowData> {
     this.selectedFields = selectedFields;
     this.conf = new SerializableConfiguration(conf);
     this.utcTimestamp = utcTimestamp;
+    this.schemaEvolutionContext = new SchemaEvolutionContext(flinkConf);
   }
 
   @Override
   public void open(FileInputSplit fileSplit) throws IOException {
+    String[] actualFieldNames = fullFieldNames;
+    DataType[] actualFieldTypes = fullFieldTypes;
+    if (schemaEvolutionContext.isEnabled()) {
+      // getMergedSchema
+      HoodieTableMetaClient metaClient = schemaEvolutionContext.getMetaClient();
+      long commitTime = Long.parseLong(FSUtils.getCommitTime(fileSplit.getPath().getName()));
+      InternalSchema querySchema = InternalSchemaCache.searchSchemaAndCache(Long.MAX_VALUE, metaClient, false);
+      InternalSchema actualSchema = new InternalSchemaMerger(
+              InternalSchemaCache.searchSchemaAndCache(commitTime, metaClient, false),
+              querySchema,
+              true,
+              true
+      ).mergeSchema();
+
+      // getActualFields
+      actualFieldNames = actualSchema.columns().stream()
+              .skip(HOODIE_META_COLUMNS.size())
+              .map(Types.Field::name)
+              .toArray(String[]::new);
+      String tableName = metaClient.getTableConfig().getTableName();
+      actualFieldTypes = AvroSchemaConverter.convertToDataType(
+              AvroInternalSchemaConverter.convert(actualSchema, tableName)
+      ).getChildren().stream().skip(HOODIE_META_COLUMNS.size()).toArray(DataType[]::new);
+
+      CastMap castMap = CastMap.of(tableName, querySchema, actualSchema);
+      List<Integer> selectedFields1 = Arrays.stream(selectedFields).boxed().collect(Collectors.toList());
+      if (castMap.containsAnyPos(selectedFields1.stream().map(pos -> pos + HOODIE_META_COLUMNS.size()).collect(Collectors.toList()))) {
+        List<LogicalType> readType = new ArrayList<>(selectedFields1.size());
+        for (int pos : selectedFields1) {
+          readType.add(actualFieldTypes[pos].getLogicalType());
+        }
+        projection = Option.of(new RowDataCastProjection(
+                readType.toArray(new LogicalType[0]),
+                IntStream.range(0, selectedFields1.size()).toArray(),
+                castMap.rearrange(selectedFields1.stream().map(pos -> pos + HOODIE_META_COLUMNS.size()).collect(Collectors.toList()), IntStream.range(0, selectedFields1.size()).boxed().collect(Collectors.toList()))
+        ));
+      } else {
+        projection = Option.empty();
+      }
+    }
+
     // generate partition specs.
     List<String> fieldNameList = Arrays.asList(fullFieldNames);
     LinkedHashMap<String, String> partSpec = PartitionPathUtils.extractPartitionSpecFromPath(
@@ -118,8 +180,8 @@ public class CopyOnWriteInputFormat extends FileInputFormat<RowData> {
         utcTimestamp,
         true,
         conf.conf(),
-        fullFieldNames,
-        fullFieldTypes,
+        actualFieldNames,
+        actualFieldTypes,
         partObjects,
         selectedFields,
         DEFAULT_SIZE,
@@ -278,7 +340,11 @@ public class CopyOnWriteInputFormat extends FileInputFormat<RowData> {
   @Override
   public RowData nextRecord(RowData reuse) {
     currentReadCount++;
-    return reader.nextRecord();
+    ColumnarRowData rowData = reader.nextRecord();
+    if (projection.isPresent()) {
+      return projection.get().project(rowData);
+    }
+    return rowData;
   }
 
   @Override

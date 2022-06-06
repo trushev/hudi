@@ -49,7 +49,6 @@ import org.apache.flink.types.Row;
 import org.apache.flink.types.RowKind;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
-import org.apache.parquet.Strings;
 import org.apache.parquet.avro.AvroParquetReader;
 import org.apache.parquet.hadoop.ParquetReader;
 
@@ -64,10 +63,17 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Properties;
+import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
+import java.util.stream.Stream;
 
 import static junit.framework.TestCase.assertEquals;
+import static org.apache.hudi.common.model.HoodieRecord.COMMIT_SEQNO_METADATA_FIELD;
+import static org.apache.hudi.common.model.HoodieRecord.COMMIT_TIME_METADATA_FIELD;
+import static org.apache.hudi.common.model.HoodieRecord.FILENAME_METADATA_FIELD;
+import static org.apache.hudi.common.model.HoodieRecord.OPERATION_METADATA_FIELD;
+import static org.apache.hudi.utils.TestConfigurations.ROW_TYPE_EVOLUTION;
 import static org.hamcrest.CoreMatchers.is;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -295,6 +301,21 @@ public class TestData {
       deleteRow(StringData.fromString("id1"), StringData.fromString("Danny"), 22,
           TimestampData.fromEpochMillis(2), StringData.fromString("par1"))
   );
+
+  public static List<RowData> DATA_SET_EVOLUTION = Arrays.asList(
+          insertRow(ROW_TYPE_EVOLUTION,
+                  StringData.fromString("id1"), StringData.fromString("Danny"), StringData.fromString("23"),
+                  10_000.1, TimestampData.fromEpochMillis(1), StringData.fromString("par1")),
+          insertRow(ROW_TYPE_EVOLUTION,
+                  StringData.fromString("id9"), StringData.fromString("Alice"), StringData.fromString("unknown"),
+                  90_000.9, TimestampData.fromEpochMillis(9), StringData.fromString("par1")),
+          insertRow(ROW_TYPE_EVOLUTION,
+                  StringData.fromString("id3"), StringData.fromString("Julian"), StringData.fromString("53"),
+                  30_000.3, TimestampData.fromEpochMillis(3), StringData.fromString("par2"))
+  );
+
+  private static final Set<String> EXCLUDED_FIELDS = Stream.of(
+      COMMIT_TIME_METADATA_FIELD, COMMIT_SEQNO_METADATA_FIELD, FILENAME_METADATA_FIELD, OPERATION_METADATA_FIELD).collect(Collectors.toSet());
 
   public static List<RowData> dataSetInsert(int... ids) {
     List<RowData> inserts = new ArrayList<>();
@@ -695,15 +716,15 @@ public class TestData {
    * Filter out the variables like file name.
    */
   private static String filterOutVariables(GenericRecord genericRecord) {
-    List<String> fields = new ArrayList<>();
-    fields.add(genericRecord.get("_hoodie_record_key").toString());
-    fields.add(genericRecord.get("_hoodie_partition_path").toString());
-    fields.add(genericRecord.get("uuid").toString());
-    fields.add(genericRecord.get("name").toString());
-    fields.add(genericRecord.get("age").toString());
-    fields.add(genericRecord.get("ts").toString());
-    fields.add(genericRecord.get("partition").toString());
-    return Strings.join(fields, ",");
+    return genericRecord
+            .getSchema()
+            .getFields()
+            .stream()
+            .map(Schema.Field::name)
+            .filter(f -> !EXCLUDED_FIELDS.contains(f))
+            .map(genericRecord::get)
+            .map(Objects::toString)
+            .collect(Collectors.joining( "," ));
   }
 
   public static BinaryRowData insertRow(Object... fields) {

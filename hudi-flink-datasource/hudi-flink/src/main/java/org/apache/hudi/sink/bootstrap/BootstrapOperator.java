@@ -36,6 +36,7 @@ import org.apache.hudi.config.HoodieWriteConfig;
 import org.apache.hudi.configuration.FlinkOptions;
 import org.apache.hudi.configuration.HadoopConfigurations;
 import org.apache.hudi.exception.HoodieException;
+import org.apache.hudi.internal.schema.InternalSchema;
 import org.apache.hudi.sink.bootstrap.aggregate.BootstrapAggFunction;
 import org.apache.hudi.sink.meta.CkpMetadata;
 import org.apache.hudi.table.HoodieTable;
@@ -227,7 +228,10 @@ public class BootstrapOperator<I, O extends HoodieRecord<?>>
             .filter(logFile -> isValidFile(logFile.getFileStatus()))
             .map(logFile -> logFile.getPath().toString())
             .collect(toList());
-        HoodieMergedLogRecordScanner scanner = FormatUtils.logScanner(logPaths, schema, latestCommitTime.get().getTimestamp(),
+        InternalSchema internalSchema = new TableSchemaResolver(this.hoodieTable.getMetaClient())
+                .getTableInternalSchemaFromCommitMetadata()
+                .orElse(InternalSchema.getEmptyInternalSchema());
+        HoodieMergedLogRecordScanner scanner = FormatUtils.logScanner(logPaths, schema, internalSchema, latestCommitTime.get().getTimestamp(),
             writeConfig, hadoopConf);
 
         try {

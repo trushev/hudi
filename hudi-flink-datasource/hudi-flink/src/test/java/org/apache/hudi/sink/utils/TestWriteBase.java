@@ -29,6 +29,7 @@ import org.apache.hudi.configuration.FlinkOptions;
 import org.apache.hudi.configuration.HadoopConfigurations;
 import org.apache.hudi.configuration.OptionsResolver;
 import org.apache.hudi.exception.HoodieException;
+import org.apache.hudi.internal.schema.Type;
 import org.apache.hudi.sink.event.WriteMetadataEvent;
 import org.apache.hudi.util.StreamerUtil;
 import org.apache.hudi.utils.TestData;
@@ -50,6 +51,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
+import static org.apache.hudi.internal.schema.action.TableChange.ColumnPositionChange.ColumnPositionType;
 import static org.hamcrest.CoreMatchers.instanceOf;
 import static org.hamcrest.CoreMatchers.is;
 import static org.hamcrest.MatcherAssert.assertThat;
@@ -73,6 +75,8 @@ public class TestWriteBase {
   protected static final Map<String, String> EXPECTED4 = new HashMap<>();
 
   protected static final Map<String, List<String>> EXPECTED5 = new HashMap<>();
+
+  protected static final Map<String, String> EXPECTED6 = new HashMap<>();
 
   static {
     EXPECTED1.put("par1", "[id1,par1,id1,Danny,23,1,par1, id2,par1,id2,Stephen,33,2,par1]");
@@ -107,6 +111,11 @@ public class TestWriteBase {
         "id1,par1,id1,Danny,23,3,par1",
         "id1,par1,id1,Danny,23,4,par1",
         "id1,par1,id1,Danny,23,4,par1"));
+
+    EXPECTED6.put("par1", "[id1,par1,id1,Danny,23,10000.1,1,par1, id2,par1,id2,Stephen,33,null,2,par1, id9,par1,id9,Alice,unknown,90000.9,9,par1]");
+    EXPECTED6.put("par2", "[id3,par2,id3,Julian,53,30000.3,3,par2, id4,par2,id4,Fabian,31,null,4,par2]");
+    EXPECTED6.put("par3", "[id5,par3,id5,Sophia,18,5,par3, id6,par3,id6,Emma,20,6,par3]");
+    EXPECTED6.put("par4", "[id7,par4,id7,Bob,44,7,par4, id8,par4,id8,Han,56,8,par4]");
   }
 
   // -------------------------------------------------------------------------
@@ -385,6 +394,21 @@ public class TestWriteBase {
     public TestHarness assertNotConfirming() {
       assertFalse(this.pipeline.isConforming(),
           "The write function should finish waiting for the instant to commit");
+      return this;
+    }
+
+    public TestHarness addColumn(String colName, Schema schema, String doc, String position, ColumnPositionType positionType) {
+      pipeline.getWriteClient().addColumn(colName, schema, doc, position, positionType);
+      return this;
+    }
+
+    public TestHarness updateColumnType(String colName, Type newType) {
+      pipeline.getWriteClient().updateColumnType(colName, newType);
+      return this;
+    }
+
+    public TestHarness renameColumn(String colName, String newName) {
+      pipeline.getWriteClient().renameColumn(colName, newName);
       return this;
     }
 

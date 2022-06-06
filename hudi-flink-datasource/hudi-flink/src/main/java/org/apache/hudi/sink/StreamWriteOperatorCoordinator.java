@@ -569,6 +569,11 @@ public class StreamWriteOperatorCoordinator
     this.executor = executor;
   }
 
+  @VisibleForTesting
+  public HoodieFlinkWriteClient<?> getWriteClient() {
+    return writeClient;
+  }
+
   // -------------------------------------------------------------------------
   //  Inner Class
   // -------------------------------------------------------------------------

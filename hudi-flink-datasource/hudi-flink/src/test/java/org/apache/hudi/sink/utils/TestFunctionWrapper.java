@@ -18,6 +18,7 @@
 
 package org.apache.hudi.sink.utils;
 
+import org.apache.hudi.client.HoodieFlinkWriteClient;
 import org.apache.hudi.common.model.HoodieKey;
 import org.apache.hudi.common.model.HoodieRecord;
 import org.apache.hudi.sink.StreamWriteOperatorCoordinator;
@@ -115,6 +116,13 @@ public interface TestFunctionWrapper<I> {
    */
   default boolean isConforming() {
     throw new UnsupportedOperationException();
+  }
+
+  /**
+   * Returns the write client of operator coordinator.
+   */
+  default HoodieFlinkWriteClient<?> getWriteClient() {
+    return getCoordinator().getWriteClient();
   }
 
   /**
