@@ -146,12 +146,11 @@ public abstract class BaseMergeHelper<T extends HoodieRecordPayload, I, K, O> {
   }
 
   protected Iterator<GenericRecord> getRecordIterator(
-          HoodieTable<T, ?, ?, ?> table,
-          HoodieMergeHandle<T, ?, ?, ?> mergeHandle,
-          HoodieBaseFile baseFile,
-          HoodieFileReader<GenericRecord> reader,
-          Schema readSchema) throws IOException {
-    ClosableIterator<GenericRecord> recordIterator = reader.getRecordIterator();
+      HoodieTable<T, ?, ?, ?> table,
+      HoodieMergeHandle<T, ?, ?, ?> mergeHandle,
+      HoodieBaseFile baseFile,
+      HoodieFileReader<GenericRecord> reader,
+      Schema readSchema) throws IOException {
     Option<InternalSchema> querySchemaOpt = new TableSchemaResolver(table.getMetaClient()).getTableInternalSchemaFromCommitMetadata();
     // TODO support bootstrap
     if (querySchemaOpt.isPresent() && !baseFile.getBootstrapBaseFile().isPresent()) {
@@ -165,20 +164,19 @@ public abstract class BaseMergeHelper<T extends HoodieRecordPayload, I, K, O> {
       List<String> colNamesFromQuerySchema = querySchema.getAllColsFullName();
       List<String> colNamesFromWriteSchema = writeInternalSchema.getAllColsFullName();
       List<String> sameCols = colNamesFromWriteSchema.stream()
-              .filter(f -> colNamesFromQuerySchema.contains(f)
-                      && writeInternalSchema.findIdByName(f) == querySchema.findIdByName(f)
-                      && writeInternalSchema.findIdByName(f) != -1
-                      && writeInternalSchema.findType(writeInternalSchema.findIdByName(f)).equals(querySchema.findType(writeInternalSchema.findIdByName(f)))).collect(Collectors.toList());
+          .filter(f -> colNamesFromQuerySchema.contains(f)
+              && writeInternalSchema.findIdByName(f) == querySchema.findIdByName(f)
+              && writeInternalSchema.findType(writeInternalSchema.findIdByName(f)).equals(querySchema.findType(writeInternalSchema.findIdByName(f)))).collect(Collectors.toList());
       readSchema = AvroInternalSchemaConverter
-              .convert(new InternalSchemaMerger(writeInternalSchema, querySchema, true, false, false).mergeSchema(), readSchema.getName());
+          .convert(new InternalSchemaMerger(writeInternalSchema, querySchema, true, false, false).mergeSchema(), readSchema.getName());
       Schema writeSchemaFromFile = AvroInternalSchemaConverter.convert(writeInternalSchema, readSchema.getName());
       boolean needToReWriteRecord = sameCols.size() != colNamesFromWriteSchema.size()
           || SchemaCompatibility.checkReaderWriterCompatibility(readSchema, writeSchemaFromFile).getType() == SchemaCompatibility.SchemaCompatibilityType.COMPATIBLE;
       if (needToReWriteRecord) {
         Map<String, String> renameCols = InternalSchemaUtils.collectRenameCols(writeInternalSchema, querySchema);
-        return HoodieAvroUtils.rewriteRecordWithNewSchema(recordIterator, readSchema, renameCols);
+        return HoodieAvroUtils.rewriteRecordWithNewSchema(reader.getRecordIterator(), readSchema, renameCols);
       }
     }
-    return recordIterator;
+    return reader.getRecordIterator(readSchema);
   }
 }
