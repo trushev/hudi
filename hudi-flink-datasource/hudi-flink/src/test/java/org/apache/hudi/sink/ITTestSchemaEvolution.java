@@ -52,6 +52,7 @@ import java.util.HashSet;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 import static org.apache.hudi.internal.schema.action.TableChange.ColumnPositionChange.ColumnPositionType.AFTER;
@@ -218,6 +219,7 @@ public class ITTestSchemaEvolution extends AbstractTestBase {
         + "  ('id8', 'Han', 56, '2000-01-01 00:00:08', 'par4')"
         + ") as A(uuid, name, age, ts, `partition`)"
     ).await();
+    TimeUnit.SECONDS.sleep(5);
 
     try (HoodieFlinkWriteClient<?> writeClient = StreamerUtil.createWriteClient(optionMap.toConfig())) {
       if (shouldCompact) {
@@ -259,6 +261,7 @@ public class ITTestSchemaEvolution extends AbstractTestBase {
         + "  ('id3', 'Julian', '53', 30000.3, '2000-01-01 00:00:03', 'par2')"
         + ") as A(uuid, first_name, age, salary, ts, `partition`)"
     ).await();
+    TimeUnit.SECONDS.sleep(5);
 
     TableResult tableResult = tEnv.executeSql("select first_name, salary, age from t1");
     checkAnswer(tableResult, expectedResult);
