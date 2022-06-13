@@ -23,6 +23,7 @@ import org.apache.hudi.client.utils.MergingIterator;
 import org.apache.hudi.common.fs.FSUtils;
 import org.apache.hudi.common.model.HoodieBaseFile;
 import org.apache.hudi.common.model.HoodieRecordPayload;
+import org.apache.hudi.common.table.TableSchemaResolver;
 import org.apache.hudi.common.util.InternalSchemaCache;
 import org.apache.hudi.common.util.Option;
 import org.apache.hudi.common.util.queue.BoundedInMemoryQueueConsumer;
@@ -152,6 +153,9 @@ public abstract class BaseMergeHelper<T extends HoodieRecordPayload, I, K, O> {
       HoodieFileReader<GenericRecord> reader,
       Schema readSchema) throws IOException {
     Option<InternalSchema> querySchemaOpt = SerDeHelper.fromJson(table.getConfig().getInternalSchema());
+    if (!querySchemaOpt.isPresent()) {
+      querySchemaOpt = new TableSchemaResolver(table.getMetaClient()).getTableInternalSchemaFromCommitMetadata();
+    }
     boolean needToReWriteRecord = false;
     Map<String, String> renameCols = new HashMap<>();
     // TODO support bootstrap
