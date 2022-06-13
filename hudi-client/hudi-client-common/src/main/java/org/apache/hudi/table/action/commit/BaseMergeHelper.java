@@ -23,7 +23,6 @@ import org.apache.hudi.client.utils.MergingIterator;
 import org.apache.hudi.common.fs.FSUtils;
 import org.apache.hudi.common.model.HoodieBaseFile;
 import org.apache.hudi.common.model.HoodieRecordPayload;
-import org.apache.hudi.common.table.TableSchemaResolver;
 import org.apache.hudi.common.util.InternalSchemaCache;
 import org.apache.hudi.common.util.Option;
 import org.apache.hudi.common.util.queue.BoundedInMemoryQueueConsumer;
@@ -33,6 +32,7 @@ import org.apache.hudi.internal.schema.action.InternalSchemaMerger;
 import org.apache.hudi.internal.schema.convert.AvroInternalSchemaConverter;
 import org.apache.hudi.internal.schema.utils.AvroSchemaEvolutionUtils;
 import org.apache.hudi.internal.schema.utils.InternalSchemaUtils;
+import org.apache.hudi.internal.schema.utils.SerDeHelper;
 import org.apache.hudi.io.HoodieMergeHandle;
 import org.apache.hudi.io.storage.HoodieFileReader;
 import org.apache.hudi.io.storage.HoodieFileReaderFactory;
@@ -52,6 +52,7 @@ import org.apache.hadoop.fs.Path;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -150,7 +151,9 @@ public abstract class BaseMergeHelper<T extends HoodieRecordPayload, I, K, O> {
       HoodieBaseFile baseFile,
       HoodieFileReader<GenericRecord> reader,
       Schema readSchema) throws IOException {
-    Option<InternalSchema> querySchemaOpt = new TableSchemaResolver(table.getMetaClient()).getTableInternalSchemaFromCommitMetadata();
+    Option<InternalSchema> querySchemaOpt = SerDeHelper.fromJson(table.getConfig().getInternalSchema());
+    boolean needToReWriteRecord = false;
+    Map<String, String> renameCols = new HashMap<>();
     // TODO support bootstrap
     if (querySchemaOpt.isPresent() && !baseFile.getBootstrapBaseFile().isPresent()) {
       // check implicitly add columns, and position reorder(spark sql may change cols order)
@@ -165,17 +168,21 @@ public abstract class BaseMergeHelper<T extends HoodieRecordPayload, I, K, O> {
       List<String> sameCols = colNamesFromWriteSchema.stream()
           .filter(f -> colNamesFromQuerySchema.contains(f)
               && writeInternalSchema.findIdByName(f) == querySchema.findIdByName(f)
+              && writeInternalSchema.findIdByName(f) != -1
               && writeInternalSchema.findType(writeInternalSchema.findIdByName(f)).equals(querySchema.findType(writeInternalSchema.findIdByName(f)))).collect(Collectors.toList());
       readSchema = AvroInternalSchemaConverter
           .convert(new InternalSchemaMerger(writeInternalSchema, querySchema, true, false, false).mergeSchema(), readSchema.getName());
       Schema writeSchemaFromFile = AvroInternalSchemaConverter.convert(writeInternalSchema, readSchema.getName());
-      boolean needToReWriteRecord = sameCols.size() != colNamesFromWriteSchema.size()
-          || SchemaCompatibility.checkReaderWriterCompatibility(readSchema, writeSchemaFromFile).getType() == SchemaCompatibility.SchemaCompatibilityType.COMPATIBLE;
+      needToReWriteRecord = sameCols.size() != colNamesFromWriteSchema.size()
+          || SchemaCompatibility.checkReaderWriterCompatibility(readSchema, writeSchemaFromFile).getType() == org.apache.avro.SchemaCompatibility.SchemaCompatibilityType.COMPATIBLE;
       if (needToReWriteRecord) {
-        Map<String, String> renameCols = InternalSchemaUtils.collectRenameCols(writeInternalSchema, querySchema);
-        return HoodieAvroUtils.rewriteRecordWithNewSchema(reader.getRecordIterator(), readSchema, renameCols);
+        renameCols = InternalSchemaUtils.collectRenameCols(writeInternalSchema, querySchema);
       }
     }
-    return reader.getRecordIterator(readSchema);
+    if (needToReWriteRecord) {
+      return HoodieAvroUtils.rewriteRecordWithNewSchema(reader.getRecordIterator(), readSchema, renameCols);
+    } else {
+      return reader.getRecordIterator(readSchema);
+    }
   }
 }
