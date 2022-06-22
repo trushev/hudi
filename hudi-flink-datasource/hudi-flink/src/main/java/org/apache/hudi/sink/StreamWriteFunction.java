@@ -46,6 +46,7 @@ import org.slf4j.LoggerFactory;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -389,10 +390,9 @@ public class StreamWriteFunction<I> extends AbstractStreamWriteFunction<I> {
       }
     } else if (flushBuffer) {
       // find the max size bucket and flush it out
-      List<DataBucket> sortedBuckets = this.buckets.values().stream()
-          .sorted((b1, b2) -> Long.compare(b2.detector.totalSize, b1.detector.totalSize))
-          .collect(Collectors.toList());
-      final DataBucket bucketToFlush = sortedBuckets.get(0);
+      final DataBucket bucketToFlush = this.buckets.values().stream()
+          .max(Comparator.comparingLong(b -> b.detector.totalSize))
+          .orElseThrow(IllegalStateException::new);
       if (flushBucket(bucketToFlush)) {
         this.tracer.countDown(bucketToFlush.detector.totalSize);
         bucketToFlush.reset();

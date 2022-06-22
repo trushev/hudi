@@ -18,6 +18,8 @@
 
 package org.apache.hudi.sink;
 
+import org.apache.flink.table.api.TableEnvironment;
+import org.apache.flink.table.api.bridge.java.StreamTableEnvironment;
 import org.apache.hudi.common.model.HoodieRecord;
 import org.apache.hudi.common.model.HoodieTableType;
 import org.apache.hudi.common.util.Option;
@@ -103,6 +105,37 @@ public class ITTestDataStreamWrite extends TestLogger {
     conf.setBoolean(FlinkOptions.PRE_COMBINE,true);
 
     testWriteToHoodie(conf, "cow_write", 2, EXPECTED);
+  }
+
+  @SuppressWarnings({"SqlNoDataSourceInspection", "SqlDialectInspection"})
+  @Test
+  public void test() throws Exception {
+    String path = tempFile.getAbsolutePath();
+    StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+    env.setParallelism(1);
+    StreamTableEnvironment tEnv = StreamTableEnvironment.create(env);
+    tEnv.executeSql( ""
+        + "create table source ("
+        + "  uuid int"
+        + ") with ("
+        + "  'connector' = 'datagen',"
+        + "  'fields.uuid.kind' = 'sequence',"
+        + "  'fields.uuid.start' = '1',"
+        + "  'fields.uuid.end' = '10000'"
+        + ")");
+    tEnv.executeSql(""
+        + "create table sink ("
+        + "  uuid int"
+        + ") partitioned by (`uuid`) with ("
+        + "  'connector' = 'hudi',"
+        + "  'table.type' = 'MERGE_ON_READ',"
+        + "  'write.index_bootstrap.tasks' = '1',"
+        + "  'write.tasks' = '1',"
+        + "  'path' = '" + path + "',"
+        + "  'write.task.max.size' = '200.00000000001'"
+        + ")");
+    tEnv.executeSql("insert into sink select * from source").await();
+    System.out.println();
   }
 
   @Test
