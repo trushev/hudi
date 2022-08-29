@@ -249,11 +249,7 @@ public class HoodieAvroDataBlock extends HoodieDataBlock {
     dis.readFully(compressedSchema, 0, schemaLength);
     Schema writerSchema = new Schema.Parser().parse(decompress(compressedSchema));
 
-    if (readerSchema == null) {
-      readerSchema = writerSchema;
-    }
-
-    if (!internalSchema.isEmptySchema()) {
+    if (readerSchema == null || !internalSchema.isEmptySchema()) {
       readerSchema = writerSchema;
     }
 

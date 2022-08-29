@@ -100,8 +100,7 @@ public class TestAvroSchemaEvolutionUtils {
 
   @Test
   public void testRecordAndPrimitiveTypes() {
-    Types.RecordType record = Types.RecordType.get(Arrays.asList(new Types.Field[] {
-        Types.Field.get(0, "bool", Types.BooleanType.get()),
+    Types.RecordType record = Types.RecordType.get(Arrays.asList(Types.Field.get(0, "bool", Types.BooleanType.get()),
         Types.Field.get(1, "int", Types.IntType.get()),
         Types.Field.get(2, "long", Types.LongType.get()),
         Types.Field.get(3, "float", Types.FloatType.get()),
@@ -113,8 +112,7 @@ public class TestAvroSchemaEvolutionUtils {
         Types.Field.get(9, "uuid", Types.UUIDType.get()),
         Types.Field.get(10, "fixed", Types.FixedType.getFixed(10)),
         Types.Field.get(11, "binary", Types.BinaryType.get()),
-        Types.Field.get(12, "decimal", Types.DecimalType.get(10, 2))
-    }));
+        Types.Field.get(12, "decimal", Types.DecimalType.get(10, 2))));
 
     Schema schema = create("t1",
         new Schema.Field("bool", AvroInternalSchemaConverter.nullableSchema(Schema.create(Schema.Type.BOOLEAN)), null, JsonProperties.NULL_VALUE),
@@ -160,7 +158,8 @@ public class TestAvroSchemaEvolutionUtils {
   public void testComplexConvert() {
     Schema schema = new Schema.Parser().parse(schemaStr);
 
-    InternalSchema internalSchema = new InternalSchema(Types.Field.get(0, false, "id", Types.IntType.get()),
+    InternalSchema internalSchema = new InternalSchema(Arrays.asList(
+        Types.Field.get(0, false, "id", Types.IntType.get()),
         Types.Field.get(1, true, "data", Types.StringType.get()),
         Types.Field.get(2, true, "preferences",
             Types.RecordType.get(Types.Field.get(7, false, "feature1",
@@ -171,7 +170,7 @@ public class TestAvroSchemaEvolutionUtils {
             Types.RecordType.get(Types.Field.get(14, false, "x", Types.LongType.get()), Types.Field.get(15, false, "y", Types.LongType.get())))),
         Types.Field.get(5, false,"doubles", Types.ArrayType.get(16, false, Types.DoubleType.get())),
         Types.Field.get(6, true, "properties", Types.MapType.get(17, 18, Types.StringType.get(), Types.StringType.get()))
-    );
+    ));
 
     Type convertRecord = AvroInternalSchemaConverter.convert(schema).getRecord();
     Assertions.assertEquals(convertRecord, internalSchema.getRecord());
@@ -263,7 +262,7 @@ public class TestAvroSchemaEvolutionUtils {
     avroRecord.put("col8", false);
     ByteBuffer bb = ByteBuffer.wrap(new byte[] {97, 48, 53});
     avroRecord.put("col9", bb);
-    Assertions.assertEquals(GenericData.get().validate(avroSchema, avroRecord), true);
+    Assertions.assertTrue(GenericData.get().validate(avroSchema, avroRecord));
     InternalSchema internalSchema = AvroInternalSchemaConverter.convert(avroSchema);
     // do change type operation
     TableChanges.ColumnUpdateChange updateChange = TableChanges.ColumnUpdateChange.get(internalSchema);
@@ -288,7 +287,7 @@ public class TestAvroSchemaEvolutionUtils {
     Schema newAvroSchema = AvroInternalSchemaConverter.convert(newSchema, avroSchema.getName());
     GenericRecord newRecord = HoodieAvroUtils.rewriteRecordWithNewSchema(avroRecord, newAvroSchema, Collections.emptyMap());
 
-    Assertions.assertEquals(GenericData.get().validate(newAvroSchema, newRecord), true);
+    Assertions.assertTrue(GenericData.get().validate(newAvroSchema, newRecord));
   }
 
   @Test
@@ -311,7 +310,7 @@ public class TestAvroSchemaEvolutionUtils {
     GenericData.Record preferencesRecord = new GenericData.Record(AvroInternalSchemaConverter.convert(record.fieldType("preferences"), "test1_preferences"));
     preferencesRecord.put("feature1", false);
     preferencesRecord.put("feature2", true);
-    Assertions.assertEquals(GenericData.get().validate(AvroInternalSchemaConverter.convert(record.fieldType("preferences"), "test1_preferences"), preferencesRecord), true);
+    Assertions.assertTrue(GenericData.get().validate(AvroInternalSchemaConverter.convert(record.fieldType("preferences"), "test1_preferences"), preferencesRecord));
     avroRecord.put("preferences", preferencesRecord);
     // fill mapType
     Map<String, GenericData.Record> locations = new HashMap<>();
@@ -332,7 +331,7 @@ public class TestAvroSchemaEvolutionUtils {
     avroRecord.put("doubles", doubles);
 
     // do check
-    Assertions.assertEquals(GenericData.get().validate(schema, avroRecord), true);
+    Assertions.assertTrue(GenericData.get().validate(schema, avroRecord));
     // create newSchema
     Types.RecordType newRecord = Types.RecordType.get(
         Types.Field.get(0, false, "id", Types.IntType.get()),
@@ -353,7 +352,7 @@ public class TestAvroSchemaEvolutionUtils {
     Schema newAvroSchema = AvroInternalSchemaConverter.convert(newRecord, schema.getName());
     GenericRecord newAvroRecord = HoodieAvroUtils.rewriteRecordWithNewSchema(avroRecord, newAvroSchema, Collections.emptyMap());
     // test the correctly of rewrite
-    Assertions.assertEquals(GenericData.get().validate(newAvroSchema, newAvroRecord), true);
+    Assertions.assertTrue(GenericData.get().validate(newAvroSchema, newAvroRecord));
 
     // test rewrite with rename
     InternalSchema internalSchema = AvroInternalSchemaConverter.convert(schema);
@@ -370,7 +369,7 @@ public class TestAvroSchemaEvolutionUtils {
     Map<String, String> renameCols = InternalSchemaUtils.collectRenameCols(internalSchema, internalSchemaRename);
     GenericRecord avroRecordRename = HoodieAvroUtils.rewriteRecordWithNewSchema(avroRecord, avroSchemaRename, renameCols);
     // test the correctly of rewrite
-    Assertions.assertEquals(GenericData.get().validate(avroSchemaRename, avroRecordRename), true);
+    Assertions.assertTrue(GenericData.get().validate(avroSchemaRename, avroRecordRename));
   }
 
   @Test

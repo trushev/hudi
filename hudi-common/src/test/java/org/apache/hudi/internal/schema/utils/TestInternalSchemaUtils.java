@@ -40,12 +40,10 @@ public class TestInternalSchemaUtils {
     prunedCols.add(0);
     prunedCols.add(2);
     InternalSchema prunedSchema = InternalSchemaUtils.pruneInternalSchemaByID(originSchema, prunedCols, null);
-    InternalSchema checkedSchema = new InternalSchema(Arrays.asList(new Types.Field[] {
-        Types.Field.get(0, "bool", Types.BooleanType.get()),
+    InternalSchema checkedSchema = new InternalSchema(Arrays.asList(Types.Field.get(0, "bool", Types.BooleanType.get()),
         Types.Field.get(2, "long", Types.LongType.get()),
         Types.Field.get(3, "float", Types.FloatType.get()),
-        Types.Field.get(4, "double", Types.DoubleType.get())
-    }));
+        Types.Field.get(4, "double", Types.DoubleType.get())));
     Assertions.assertEquals(prunedSchema, checkedSchema);
 
     // nest schema
@@ -56,13 +54,13 @@ public class TestInternalSchemaUtils {
     prunedNestCols.add(1);
     prunedNestCols.add(5);
     prunedNestCols.add(11);
-    InternalSchema prunedNestSchema = InternalSchemaUtils.pruneInternalSchemaByID(originNestSchema, prunedNestCols, null);
+    InternalSchemaUtils.pruneInternalSchemaByID(originNestSchema, prunedNestCols, null);
   }
 
   @Test
   public void testInternalSchemaVisitor() {
     Types.RecordType nestRecord = getNestRecordType();
-    Map<String, Integer> result = InternalSchemaBuilder.getBuilder().buildNameToId(nestRecord);
+    Map<String, Integer> result = InternalSchemaBuilder.buildNameToId(nestRecord);
     Assertions.assertEquals(result.size(), 12);
     Assertions.assertEquals(result.get("locations.value.long"), 11);
     Assertions.assertEquals(result.get("locations.value.lat"), 10);
@@ -71,7 +69,7 @@ public class TestInternalSchemaUtils {
     Assertions.assertEquals(result.get("doubles.element"), 7);
 
     Types.RecordType simpleRecord = getSimpleRecordType();
-    Map<String, Integer> result1 = InternalSchemaBuilder.getBuilder().buildNameToId(simpleRecord);
+    Map<String, Integer> result1 = InternalSchemaBuilder.buildNameToId(simpleRecord);
     Assertions.assertEquals(result1.size(), 5);
     Assertions.assertEquals(result1.get("double"), 4);
   }
@@ -89,12 +87,11 @@ public class TestInternalSchemaUtils {
   }
 
   public Types.RecordType getSimpleRecordType() {
-    return Types.RecordType.get(Arrays.asList(new Types.Field[] {
+    return Types.RecordType.get(Arrays.asList(
         Types.Field.get(0, "bool", Types.BooleanType.get()),
         Types.Field.get(1, "int", Types.IntType.get()),
         Types.Field.get(2, "long", Types.LongType.get()),
         Types.Field.get(3, "float", Types.FloatType.get()),
-        Types.Field.get(4, "double", Types.DoubleType.get())
-    }));
+        Types.Field.get(4, "double", Types.DoubleType.get())));
   }
 }

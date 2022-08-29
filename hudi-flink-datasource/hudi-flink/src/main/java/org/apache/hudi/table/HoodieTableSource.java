@@ -424,16 +424,15 @@ public class HoodieTableSource implements
         AvroSchemaConverter.convertToSchema(requiredRowType).toString(),
         inputSplits,
         conf.getString(FlinkOptions.RECORD_KEY_FIELD).split(","));
-    return MergeOnReadInputFormat.builder()
-        .config(this.conf)
-        .tableState(hoodieTableState)
+    return new MergeOnReadInputFormat(
+        this.conf,
+        hoodieTableState,
         // use the explicit fields' data type because the AvroSchemaConverter
         // is not very stable.
-        .fieldTypes(rowDataType.getChildren())
-        .defaultPartName(conf.getString(FlinkOptions.PARTITION_DEFAULT_NAME))
-        .limit(this.limit)
-        .emitDelete(emitDelete)
-        .build();
+        rowDataType.getChildren(),
+        conf.getString(FlinkOptions.PARTITION_DEFAULT_NAME),
+        this.limit,
+        emitDelete);
   }
 
   private InputFormat<RowData, ?> baseFileOnlyInputFormat() {
@@ -455,6 +454,7 @@ public class HoodieTableSource implements
         this.requiredPos,
         this.conf.getString(FlinkOptions.PARTITION_DEFAULT_NAME),
         this.limit == NO_LIMIT_CONSTANT ? Long.MAX_VALUE : this.limit, // ParquetInputFormat always uses the limit value
+        this.conf,
         getParquetConf(this.conf, this.hadoopConf),
         this.conf.getBoolean(FlinkOptions.UTC_TIMEZONE)
     );

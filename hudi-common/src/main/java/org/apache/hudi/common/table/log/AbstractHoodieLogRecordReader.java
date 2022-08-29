@@ -403,8 +403,11 @@ public abstract class AbstractHoodieLogRecordReader {
       Long currentInstantTime = Long.parseLong(dataBlock.getLogBlockHeader().get(INSTANT_TIME));
       InternalSchema fileSchema = InternalSchemaCache
           .searchSchemaAndCache(currentInstantTime, hoodieTableMetaClient, false);
-      Schema mergeSchema = AvroInternalSchemaConverter
-          .convert(new InternalSchemaMerger(fileSchema, internalSchema, true, false).mergeSchema(), readerSchema.getName());
+      InternalSchema querySchema = AvroInternalSchemaConverter.convert(this.readerSchema);
+
+      InternalSchema is = new InternalSchemaMerger(fileSchema, internalSchema, true, false).mergeSchema();
+      Schema mergeSchema = AvroInternalSchemaConverter.convert(is, readerSchema.getName());
+
       result = Option.of(mergeSchema);
     }
     return result;

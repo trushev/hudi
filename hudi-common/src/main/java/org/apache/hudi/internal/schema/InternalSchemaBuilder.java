@@ -28,6 +28,7 @@ import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
@@ -51,7 +52,7 @@ public class InternalSchemaBuilder implements Serializable {
    * @param type hoodie internal type
    * @return a mapping from id to full field name
    */
-  public Map<Integer, String> buildIdToName(Type type) {
+  public static Map<Integer, String> buildIdToName(Type type) {
     Map<Integer, String> result = new HashMap<>();
     buildNameToId(type).forEach((k, v) -> result.put(v, k));
     return result;
@@ -64,8 +65,8 @@ public class InternalSchemaBuilder implements Serializable {
    * @param type hoodie internal type
    * @return a mapping from full field name to id
    */
-  public Map<String, Integer> buildNameToId(Type type) {
-    return visit(type, new NameToIDVisitor());
+  public static Map<String, Integer> buildNameToId(Type type) {
+    return getBuilder().visit(type, new NameToIDVisitor());
   }
 
   /**
@@ -85,44 +86,28 @@ public class InternalSchemaBuilder implements Serializable {
         List<T> results = new ArrayList<>();
         for (Types.Field f : record.fields()) {
           visitor.beforeField(f);
-          T result;
-          try {
-            result = visit(f.type(), visitor);
-          } finally {
-            visitor.afterField(f);
-          }
+          T result = visit(f.type(), visitor);
+          visitor.afterField(f);
           results.add(visitor.field(f, result));
         }
         return visitor.record(record, results);
       case ARRAY:
         Types.ArrayType array = (Types.ArrayType) type;
-        T elementResult;
         Types.Field elementField = array.field(array.elementId());
         visitor.beforeArrayElement(elementField);
-        try {
-          elementResult = visit(elementField.type(), visitor);
-        } finally {
-          visitor.afterArrayElement(elementField);
-        }
+        T elementResult = visit(elementField.type(), visitor);
+        visitor.afterArrayElement(elementField);
         return visitor.array(array, elementResult);
       case MAP:
         Types.MapType map = (Types.MapType) type;
-        T keyResult;
-        T valueResult;
         Types.Field keyField = map.field(map.keyId());
         visitor.beforeMapKey(keyField);
-        try {
-          keyResult = visit(map.keyType(), visitor);
-        } finally {
-          visitor.afterMapKey(keyField);
-        }
+        T keyResult = visit(map.keyType(), visitor);
+        visitor.afterMapKey(keyField);
         Types.Field valueField = map.field(map.valueId());
         visitor.beforeMapValue(valueField);
-        try {
-          valueResult = visit(map.valueType(), visitor);
-        } finally {
-          visitor.afterMapValue(valueField);
-        }
+        T valueResult = visit(map.valueType(), visitor);
+        visitor.afterMapValue(valueField);
         return visitor.map(map, keyResult, valueResult);
       default:
         return visitor.primitive((Type.PrimitiveType)type);
@@ -135,10 +120,23 @@ public class InternalSchemaBuilder implements Serializable {
    * @param type hoodie internal type
    * @return a mapping from id to field
    */
-  public Map<Integer, Types.Field> buildIdToField(Type type) {
+  public static Map<Integer, Types.Field> buildIdToField(Type type) {
     Map<Integer, Types.Field> idToField = new HashMap<>();
-    visitIdToField(type, idToField);
+    getBuilder().visitIdToField(type, idToField);
     return idToField;
+  }
+
+  public static Map<Integer, Types.Field> buildIdToField(List<Types.Field> fields) {
+    Map<Integer, Types.Field> idToField = new HashMap<>();
+    getBuilder().visitIdToField(fields, idToField);
+    return idToField;
+  }
+
+  private void visitIdToField(List<Types.Field> fields, Map<Integer, Types.Field> index) {
+    for (Types.Field field : fields) {
+      visitIdToField(field.type(), index);
+      index.put(field.fieldId(), field);
+    }
   }
 
   private void visitIdToField(Type type, Map<Integer, Types.Field> index) {
@@ -166,7 +164,6 @@ public class InternalSchemaBuilder implements Serializable {
         }
         return;
       default:
-        return;
     }
   }
 
@@ -245,8 +242,7 @@ public class InternalSchemaBuilder implements Serializable {
         int currentId = nextId.get();
         nextId.set(currentId + record.fields().size());
         List<Types.Field> internalFields = new ArrayList<>();
-        for (int i = 0; i < oldFields.size(); i++) {
-          Types.Field oldField = oldFields.get(i);
+        for (Types.Field oldField : oldFields) {
           Type fieldType = refreshNewId(oldField.type(), nextId);
           internalFields.add(Types.Field.get(currentId++, oldField.isOptional(), oldField.name(), fieldType, oldField.doc()));
         }

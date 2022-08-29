@@ -43,7 +43,7 @@ public class MergeOnReadInputSplit implements InputSplit {
   private final long maxCompactionMemoryInBytes;
   private final String mergeType;
   private final Option<InstantRange> instantRange;
-  private String fileId;
+  private final String fileId;
 
   // for streaming reader to record the consumed offset,
   // which is the start of next round reading.
@@ -72,10 +72,6 @@ public class MergeOnReadInputSplit implements InputSplit {
 
   public String getFileId() {
     return fileId;
-  }
-
-  public void setFileId(String fileId) {
-    this.fileId = fileId;
   }
 
   public Option<String> getBasePath() {

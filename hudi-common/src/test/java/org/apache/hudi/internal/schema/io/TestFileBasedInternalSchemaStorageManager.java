@@ -34,7 +34,7 @@ import java.io.IOException;
 import java.util.Arrays;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 
 /**
  * Tests {@link FileBasedInternalSchemaStorageManager}.
@@ -51,8 +51,7 @@ public class TestFileBasedInternalSchemaStorageManager extends HoodieCommonTestH
   public void testPersistAndReadHistorySchemaStr() throws IOException {
     timeline = new HoodieActiveTimeline(metaClient);
     FileBasedInternalSchemaStorageManager fm = new FileBasedInternalSchemaStorageManager(metaClient);
-    InternalSchema currentSchema = getSimpleSchema();
-    currentSchema.setSchemaId(0L);
+    InternalSchema currentSchema = getSimpleSchema(0);
     // save first schema.
     fm.persistHistorySchemaStr("0000", SerDeHelper.inheritSchemas(currentSchema, ""));
     // Simulate commit.
@@ -62,8 +61,7 @@ public class TestFileBasedInternalSchemaStorageManager extends HoodieCommonTestH
     InternalSchema readSchema = fm.getSchemaByKey("0").get();
     assertEquals(currentSchema, readSchema);
     // save history schema again
-    InternalSchema secondSchema = getSimpleSchema();
-    secondSchema.setSchemaId(1L);
+    InternalSchema secondSchema = getSimpleSchema(1);
     fm.persistHistorySchemaStr("0001", SerDeHelper.inheritSchemas(secondSchema, fm.getHistorySchemaStr()));
     // Simulate commit.
     simulateCommit("0001");
@@ -72,19 +70,17 @@ public class TestFileBasedInternalSchemaStorageManager extends HoodieCommonTestH
     assertEquals(secondSchema, fm.getSchemaByKey("1").get());
 
     // test write failed and residual file clean.
-    InternalSchema thirdSchema = getSimpleSchema();
-    thirdSchema.setSchemaId(2L);
+    InternalSchema thirdSchema = getSimpleSchema(2);
     fm.persistHistorySchemaStr("0002", SerDeHelper.inheritSchemas(thirdSchema, fm.getHistorySchemaStr()));
     // do not simulate commit "0002", so current save file will be residual files.
     // try 4st persist
-    InternalSchema lastSchema = getSimpleSchema();
-    lastSchema.setSchemaId(3L);
+    InternalSchema lastSchema = getSimpleSchema(3);
     fm.persistHistorySchemaStr("0004", SerDeHelper.inheritSchemas(lastSchema, fm.getHistorySchemaStr()));
     simulateCommit("0004");
     metaClient.reloadActiveTimeline();
     // now the residual file created by 3st persist should be removed.
     File f = new File(metaClient.getSchemaFolderName() + File.separator + "0002.schemacommit");
-    assertTrue(!f.exists());
+    assertFalse(f.exists());
     assertEquals(lastSchema, fm.getSchemaByKey("3").get());
   }
 
@@ -99,12 +95,11 @@ public class TestFileBasedInternalSchemaStorageManager extends HoodieCommonTestH
         Option.empty());
   }
 
-  private InternalSchema getSimpleSchema() {
-    Types.RecordType record = Types.RecordType.get(Arrays.asList(new Types.Field[] {
+  private InternalSchema getSimpleSchema(long versionId) {
+    Types.RecordType record = Types.RecordType.get(Arrays.asList(
         Types.Field.get(0, "bool", Types.BooleanType.get()),
-        Types.Field.get(1, "int", Types.IntType.get()),
-    }));
-    return new InternalSchema(record.fields());
+        Types.Field.get(1, "int", Types.IntType.get())));
+    return new InternalSchema(versionId, record.fields());
   }
 }
 

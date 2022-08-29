@@ -83,8 +83,13 @@ public class AvroInternalSchemaConverter {
 
   /** Convert an avro schema into internalSchema. */
   public static InternalSchema convert(Schema schema) {
+    return convert(InternalSchema.DEFAULT_VERSION_ID, schema);
+  }
+
+  /** Convert an avro schema into internalSchema with specified versionId. */
+  public static InternalSchema convert(long versionId, Schema schema) {
     List<Types.Field> fields = ((Types.RecordType) convertToField(schema)).fields();
-    return new InternalSchema(fields);
+    return new InternalSchema(versionId, fields);
   }
 
   /** Check whether current avro schema is optional?. */
@@ -115,7 +120,7 @@ public class AvroInternalSchemaConverter {
    */
   public static Type buildTypeFromAvroSchema(Schema schema) {
     // set flag to check this has not been visited.
-    Deque<String> visited = new LinkedList();
+    Deque<String> visited = new LinkedList<>();
     AtomicInteger nextId = new AtomicInteger(1);
     return visitAvroSchemaToBuildType(schema, visited, true, nextId);
   }

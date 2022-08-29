@@ -22,12 +22,13 @@ import org.apache.hudi.internal.schema.Type.PrimitiveType;
 import org.apache.hudi.internal.schema.Type.NestedType;
 
 import java.io.Serializable;
+import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.HashMap;
+import java.util.Collections;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 public class Types {
@@ -466,42 +467,38 @@ public class Types {
       return new RecordType(Arrays.asList(fields));
     }
 
-    private final Field[] fields;
-
-    private transient Map<String, Field> nameToFields = null;
-    private transient Map<Integer, Field> idToFields = null;
+    private final List<Field> fields;
+    private final Map<Integer, Field> idToField;
+    private final Map<String, Integer> nameToId;
 
     private RecordType(List<Field> fields) {
-      this.fields = new Field[fields.size()];
-      for (int i = 0; i < this.fields.length; i += 1) {
-        this.fields[i] = fields.get(i);
-      }
+      // TODO: what if name is not lowercase or empty?
+      this.fields = Collections.unmodifiableList(new ArrayList<>(fields));
+      this.idToField = Collections.unmodifiableMap(InternalSchemaBuilder.buildIdToField(fields));
+      this.nameToId = Collections.unmodifiableMap(this.idToField.entrySet().stream()
+          .collect(Collectors.toMap(e -> e.getValue().name(), Map.Entry::getKey)));
+    }
+
+    public Set<Integer> ids() {
+      return idToField.keySet();
     }
 
     @Override
     public List<Field> fields() {
-      return Arrays.asList(fields);
+      return fields;
     }
 
     public Field field(String name) {
-      if (nameToFields == null) {
-        nameToFields = new HashMap<>();
-        for (Field field : fields) {
-          nameToFields.put(field.name().toLowerCase(Locale.ROOT), field);
-        }
+      Integer id = nameToId.get(name);
+      if (id == null) {
+        return null;
       }
-      return nameToFields.get(name.toLowerCase(Locale.ROOT));
+      return idToField.get(id);
     }
 
     @Override
     public Field field(int id) {
-      if (idToFields == null) {
-        idToFields = new HashMap<>();
-        for (Field field : fields) {
-          idToFields.put(field.fieldId(), field);
-        }
-      }
-      return idToFields.get(id);
+      return idToField.get(id);
     }
 
     @Override
@@ -518,9 +515,13 @@ public class Types {
       return TypeID.RECORD;
     }
 
+    public int id(String name) {
+      return nameToId.getOrDefault(name, -1);
+    }
+
     @Override
     public String toString() {
-      return String.format("Record<%s>", Arrays.stream(fields).map(f -> f.toString()).collect(Collectors.joining("-")));
+      return String.format("Record<%s>", fields().stream().map(Field::toString).collect(Collectors.joining("-")));
     }
 
     @Override
@@ -532,12 +533,12 @@ public class Types {
       }
 
       RecordType that = (RecordType) o;
-      return Arrays.equals(fields, that.fields);
+      return Objects.equals(fields, that.fields);
     }
 
     @Override
     public int hashCode() {
-      return Objects.hash(Field.class, Arrays.hashCode(fields));
+      return Objects.hash(Field.class, fields);
     }
   }
 
@@ -574,7 +575,7 @@ public class Types {
 
     @Override
     public List<Field> fields() {
-      return Arrays.asList(elementField);
+      return Collections.singletonList(elementField);
     }
 
     public int elementId() {
