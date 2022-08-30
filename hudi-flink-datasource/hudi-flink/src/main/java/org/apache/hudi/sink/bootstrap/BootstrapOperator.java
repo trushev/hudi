@@ -233,7 +233,7 @@ public class BootstrapOperator<I, O extends HoodieRecord<?>>
             .collect(toList());
         InternalSchema internalSchema = schemaResolver.getTableInternalSchemaFromCommitMetadata()
             .orElse(InternalSchema.getEmptyInternalSchema());
-        HoodieMergedLogRecordScanner scanner = FormatUtils.logScanner(logPaths, schema, internalSchema, latestCommitTime.get().getTimestamp(),
+        HoodieMergedLogRecordScanner scanner = FormatUtils.logScanner(logPaths, internalSchema, latestCommitTime.get().getTimestamp(),
             writeConfig, hadoopConf);
 
         try {

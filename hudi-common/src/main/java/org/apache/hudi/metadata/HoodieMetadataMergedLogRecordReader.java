@@ -54,14 +54,14 @@ public class HoodieMetadataMergedLogRecordReader extends HoodieMergedLogRecordSc
 
   private HoodieMetadataMergedLogRecordReader(FileSystem fs, String basePath, String partitionName,
                                               List<String> logFilePaths,
-                                              Schema readerSchema, String latestInstantTime,
+                                              InternalSchema readerSchema, String latestInstantTime,
                                               Long maxMemorySizeInBytes, int bufferSize,
                                               String spillableMapBasePath,
                                               ExternalSpillableMap.DiskMapType diskMapType,
                                               boolean isBitCaskDiskMapCompressionEnabled,
                                               Option<InstantRange> instantRange, boolean allowFullScan) {
     super(fs, basePath, logFilePaths, readerSchema, latestInstantTime, maxMemorySizeInBytes, true, false, bufferSize,
-        spillableMapBasePath, instantRange, diskMapType, isBitCaskDiskMapCompressionEnabled, false, allowFullScan, Option.of(partitionName), InternalSchema.getEmptyInternalSchema());
+        spillableMapBasePath, instantRange, diskMapType, isBitCaskDiskMapCompressionEnabled, false, allowFullScan, Option.of(partitionName));
   }
 
   @Override
@@ -159,6 +159,12 @@ public class HoodieMetadataMergedLogRecordReader extends HoodieMergedLogRecordSc
 
     @Override
     public Builder withReaderSchema(Schema schema) {
+      this.readerSchema = new InternalSchema(schema);
+      return this;
+    }
+
+    @Override
+    public Builder withReaderSchema(InternalSchema schema) {
       this.readerSchema = schema;
       return this;
     }

@@ -75,8 +75,7 @@ public class HoodieLogFileReader implements HoodieLogFormat.Reader {
   private final FSDataInputStream inputStream;
   private final HoodieLogFile logFile;
   private final byte[] magicBuffer = new byte[6];
-  private final Schema readerSchema;
-  private InternalSchema internalSchema;
+  private final InternalSchema readerSchema;
   private final String keyField;
   private boolean readBlockLazily;
   private long reverseLogFilePosition;
@@ -100,12 +99,12 @@ public class HoodieLogFileReader implements HoodieLogFormat.Reader {
   public HoodieLogFileReader(FileSystem fs, HoodieLogFile logFile, Schema readerSchema, int bufferSize,
                              boolean readBlockLazily, boolean reverseReader, boolean enableRecordLookups,
                              String keyField) throws IOException {
-    this(fs, logFile, readerSchema, bufferSize, readBlockLazily, reverseReader, enableRecordLookups, keyField, InternalSchema.getEmptyInternalSchema());
+    this(fs, logFile, new InternalSchema(readerSchema), bufferSize, readBlockLazily, reverseReader, enableRecordLookups, keyField);
   }
 
-  public HoodieLogFileReader(FileSystem fs, HoodieLogFile logFile, Schema readerSchema, int bufferSize,
+  public HoodieLogFileReader(FileSystem fs, HoodieLogFile logFile, InternalSchema readerSchema, int bufferSize,
                              boolean readBlockLazily, boolean reverseReader, boolean enableRecordLookups,
-                             String keyField, InternalSchema internalSchema) throws IOException {
+                             String keyField) throws IOException {
     this.hadoopConf = fs.getConf();
     // NOTE: We repackage {@code HoodieLogFile} here to make sure that the provided path
     //       is prefixed with an appropriate scheme given that we're not propagating the FS
@@ -117,7 +116,6 @@ public class HoodieLogFileReader implements HoodieLogFormat.Reader {
     this.reverseReader = reverseReader;
     this.enableRecordLookups = enableRecordLookups;
     this.keyField = keyField;
-    this.internalSchema = internalSchema == null ? InternalSchema.getEmptyInternalSchema() : internalSchema;
     if (this.reverseReader) {
       this.reverseLogFilePosition = this.lastReverseLogFilePosition = this.logFile.getFileSize();
     }
@@ -206,11 +204,18 @@ public class HoodieLogFileReader implements HoodieLogFormat.Reader {
 
     switch (Objects.requireNonNull(blockType)) {
       case AVRO_DATA_BLOCK:
+        Schema blockSchema;
+        if ((readerSchema.isEvolutionEnabled() && !readerSchema.isEmptySchema()) || (!readerSchema.isEvolutionEnabled() && readerSchema.isEmptySchema())) {
+          // use writerSchema
+          blockSchema = null;
+        } else {
+          blockSchema = readerSchema.getAvroSchema();
+        }
         if (nextBlockVersion.getVersion() == HoodieLogFormatVersion.DEFAULT_VERSION) {
-          return HoodieAvroDataBlock.getBlock(content.get(), readerSchema, internalSchema);
+          return HoodieAvroDataBlock.getBlock(content.get(), blockSchema);
         } else {
           return new HoodieAvroDataBlock(inputStream, content, readBlockLazily, logBlockContentLoc,
-              Option.ofNullable(readerSchema), header, footer, keyField, internalSchema);
+              Option.ofNullable(blockSchema), header, footer, keyField);
         }
 
       case HFILE_DATA_BLOCK:
@@ -218,14 +223,14 @@ public class HoodieLogFileReader implements HoodieLogFormat.Reader {
             String.format("HFile block could not be of version (%d)", HoodieLogFormatVersion.DEFAULT_VERSION));
 
         return new HoodieHFileDataBlock(inputStream, content, readBlockLazily, logBlockContentLoc,
-            Option.ofNullable(readerSchema), header, footer, enableRecordLookups, logFile.getPath());
+            Option.ofNullable(readerSchema.getAvroSchema()), header, footer, enableRecordLookups, logFile.getPath());
 
       case PARQUET_DATA_BLOCK:
         checkState(nextBlockVersion.getVersion() != HoodieLogFormatVersion.DEFAULT_VERSION,
             String.format("Parquet block could not be of version (%d)", HoodieLogFormatVersion.DEFAULT_VERSION));
 
         return new HoodieParquetDataBlock(inputStream, content, readBlockLazily, logBlockContentLoc,
-             Option.ofNullable(readerSchema), header, footer, keyField);
+             Option.ofNullable(readerSchema.getAvroSchema()), header, footer, keyField);
 
       case DELETE_BLOCK:
         return new HoodieDeleteBlock(content, inputStream, readBlockLazily, Option.of(logBlockContentLoc), header, footer);

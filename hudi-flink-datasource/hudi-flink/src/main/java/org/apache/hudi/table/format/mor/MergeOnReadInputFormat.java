@@ -401,7 +401,7 @@ public class MergeOnReadInputFormat
     final GenericRecordBuilder recordBuilder = new GenericRecordBuilder(requiredSchema);
     final AvroToRowDataConverters.AvroToRowDataConverter avroToRowDataConverter =
         AvroToRowDataConverters.createRowConverter(tableState.getRequiredRowType());
-    final HoodieMergedLogRecordScanner scanner = FormatUtils.logScanner(split, tableSchema, querySchema, conf, hadoopConf);
+    final HoodieMergedLogRecordScanner scanner = FormatUtils.logScanner(split, querySchema, conf, hadoopConf);
     final Iterator<String> logRecordsKeyIterator = scanner.getRecords().keySet().iterator();
     final int[] pkOffset = tableState.getPkOffsetsInRequired();
     // flag saying whether the pk semantics has been dropped by user specified
@@ -481,7 +481,7 @@ public class MergeOnReadInputFormat
     final GenericRecordBuilder recordBuilder = new GenericRecordBuilder(requiredSchema);
     final AvroToRowDataConverters.AvroToRowDataConverter avroToRowDataConverter =
         AvroToRowDataConverters.createRowConverter(tableState.getRequiredRowType());
-    final FormatUtils.BoundedMemoryRecords records = new FormatUtils.BoundedMemoryRecords(split, tableSchema, actualSchema, hadoopConf, conf);
+    final FormatUtils.BoundedMemoryRecords records = new FormatUtils.BoundedMemoryRecords(split, querySchema, hadoopConf, conf);
     final Iterator<HoodieRecord<?>> recordsIterator = records.getRecordsIterator();
 
     return new ClosableIterator<RowData>() {
@@ -719,7 +719,7 @@ public class MergeOnReadInputFormat
       this.tableSchema = tableSchema;
       this.reader = reader;
       this.payloadProps = StreamerUtil.getPayloadConfig(flinkConf).getProps();
-      this.scanner = FormatUtils.logScanner(split, tableSchema, internalSchema, flinkConf, hadoopConf);
+      this.scanner = FormatUtils.logScanner(split, internalSchema, flinkConf, hadoopConf);
       this.logKeysIterator = scanner.getRecords().keySet().iterator();
       this.requiredSchema = requiredSchema;
       this.requiredPos = requiredPos;

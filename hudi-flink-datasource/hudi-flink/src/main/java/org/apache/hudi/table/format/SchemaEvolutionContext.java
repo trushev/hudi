@@ -66,6 +66,7 @@ public final class SchemaEvolutionContext implements Serializable {
 
   public SchemaEvolutionContext(HoodieTableMetaClient metaClient, InternalSchema querySchema) {
     this.metaClient = metaClient;
+//    querySchema = new InternalSchema(querySchema.columns().stream().filter(f -> !f.name().equals("_hoodie_operation")).collect(Collectors.toList()));
     this.querySchema = querySchema;
   }
 

@@ -45,7 +45,7 @@ public class InternalSchema implements Serializable {
   private final int maxColumnId;
   private long versionId;
 
-  private final boolean evolutionEnabled = false;
+  private final boolean evolutionEnabled;
 
   public static InternalSchema getEmptyInternalSchema() {
     return EMPTY_SCHEMA;
@@ -63,15 +63,32 @@ public class InternalSchema implements Serializable {
     this(RecordType.get(cols), maxColumnId, versionId);
   }
 
+  public InternalSchema(Schema avroSchema) {
+    this(RecordType.get(Collections.emptyList()), avroSchema, -1, -1, false);
+  }
+
   private InternalSchema(RecordType record, int maxColumnId, long versionId) {
+    this(record,
+        AvroInternalSchemaConverter.convert(record, "record"),
+        maxColumnId != -1 ? maxColumnId : record.ids().stream().mapToInt(i -> i).max().orElse(-1),
+        versionId,
+        true);
+  }
+
+  private InternalSchema(RecordType record, Schema schema, int maxColumnId, long versionId, boolean evolutionEnabled) {
     this.record = record;
-    this.avroSchema = AvroInternalSchemaConverter.convert(record, "record");
-    this.maxColumnId = maxColumnId != -1 ? maxColumnId : record.ids().stream().mapToInt(i -> i).max().orElse(-1);
+    this.avroSchema = schema;
+    this.maxColumnId = maxColumnId;
     this.versionId = versionId;
+    this.evolutionEnabled = evolutionEnabled;
   }
 
   public boolean isEmptySchema() {
-    return versionId < 0;
+    return versionId < 0 || record.fields().isEmpty();
+  }
+
+  public boolean isEvolutionEnabled() {
+    return evolutionEnabled;
   }
 
   public RecordType getRecord() {

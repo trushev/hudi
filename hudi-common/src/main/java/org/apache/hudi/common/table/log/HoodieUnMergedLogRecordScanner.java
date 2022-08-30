@@ -36,10 +36,10 @@ public class HoodieUnMergedLogRecordScanner extends AbstractHoodieLogRecordReade
 
   private final LogRecordScannerCallback callback;
 
-  private HoodieUnMergedLogRecordScanner(FileSystem fs, String basePath, List<String> logFilePaths, Schema readerSchema,
+  private HoodieUnMergedLogRecordScanner(FileSystem fs, String basePath, List<String> logFilePaths, InternalSchema readerSchema,
                                          String latestInstantTime, boolean readBlocksLazily, boolean reverseReader, int bufferSize,
-                                         LogRecordScannerCallback callback, Option<InstantRange> instantRange, InternalSchema internalSchema) {
-    super(fs, basePath, logFilePaths, readerSchema, latestInstantTime, readBlocksLazily, reverseReader, bufferSize, instantRange, false, true, Option.empty(), internalSchema);
+                                         LogRecordScannerCallback callback, Option<InstantRange> instantRange) {
+    super(fs, basePath, logFilePaths, readerSchema, latestInstantTime, readBlocksLazily, reverseReader, bufferSize, instantRange, false, true, Option.empty());
     this.callback = callback;
   }
 
@@ -77,7 +77,7 @@ public class HoodieUnMergedLogRecordScanner extends AbstractHoodieLogRecordReade
     private FileSystem fs;
     private String basePath;
     private List<String> logFilePaths;
-    private Schema readerSchema;
+    private InternalSchema readerSchema;
     private String latestInstantTime;
     private boolean readBlocksLazily;
     private boolean reverseReader;
@@ -85,48 +85,62 @@ public class HoodieUnMergedLogRecordScanner extends AbstractHoodieLogRecordReade
     private Option<InstantRange> instantRange = Option.empty();
     // specific configurations
     private LogRecordScannerCallback callback;
-    private InternalSchema internalSchema = InternalSchema.getEmptyInternalSchema();
 
+    @Override
     public Builder withFileSystem(FileSystem fs) {
       this.fs = fs;
       return this;
     }
 
+    @Override
     public Builder withBasePath(String basePath) {
       this.basePath = basePath;
       return this;
     }
 
+    @Override
     public Builder withLogFilePaths(List<String> logFilePaths) {
       this.logFilePaths = logFilePaths;
       return this;
     }
 
+    @Override
     public Builder withReaderSchema(Schema schema) {
+      this.readerSchema = new InternalSchema(schema);
+      return this;
+    }
+
+    @Override
+    public Builder withReaderSchema(InternalSchema schema) {
       this.readerSchema = schema;
       return this;
     }
 
+    @Override
     public Builder withLatestInstantTime(String latestInstantTime) {
       this.latestInstantTime = latestInstantTime;
       return this;
     }
 
+    @Override
     public Builder withReadBlocksLazily(boolean readBlocksLazily) {
       this.readBlocksLazily = readBlocksLazily;
       return this;
     }
 
+    @Override
     public Builder withReverseReader(boolean reverseReader) {
       this.reverseReader = reverseReader;
       return this;
     }
 
+    @Override
     public Builder withBufferSize(int bufferSize) {
       this.bufferSize = bufferSize;
       return this;
     }
 
+    @Override
     public Builder withInstantRange(Option<InstantRange> instantRange) {
       this.instantRange = instantRange;
       return this;
@@ -137,15 +151,10 @@ public class HoodieUnMergedLogRecordScanner extends AbstractHoodieLogRecordReade
       return this;
     }
 
-    public Builder withInternalSchema(InternalSchema internalSchema) {
-      this.internalSchema = internalSchema;
-      return this;
-    }
-
     @Override
     public HoodieUnMergedLogRecordScanner build() {
       return new HoodieUnMergedLogRecordScanner(fs, basePath, logFilePaths, readerSchema,
-          latestInstantTime, readBlocksLazily, reverseReader, bufferSize, callback, instantRange, internalSchema);
+          latestInstantTime, readBlocksLazily, reverseReader, bufferSize, callback, instantRange);
     }
   }
 }
