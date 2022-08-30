@@ -30,9 +30,12 @@ import org.apache.hudi.configuration.HadoopConfigurations;
 import org.apache.hudi.configuration.OptionsResolver;
 import org.apache.hudi.exception.HoodieException;
 import org.apache.hudi.internal.schema.InternalSchema;
-import org.apache.hudi.internal.schema.convert.AvroInternalSchemaConverter;
 import org.apache.hudi.keygen.KeyGenUtils;
-import org.apache.hudi.table.format.*;
+import org.apache.hudi.table.format.CastMap;
+import org.apache.hudi.table.format.FilePathUtils;
+import org.apache.hudi.table.format.FormatUtils;
+import org.apache.hudi.table.format.RecordIterator;
+import org.apache.hudi.table.format.SchemaEvolutionContext;
 import org.apache.hudi.table.format.cow.ParquetSplitReaderUtil;
 import org.apache.hudi.table.format.cow.vector.reader.ParquetColumnarRowSplitReader;
 import org.apache.hudi.util.AvroToRowDataConverters;
@@ -145,7 +148,7 @@ public class MergeOnReadInputFormat
   private InternalSchema actualSchema;
   private InternalSchema querySchema;
 
-  public MergeOnReadInputFormat(
+  private MergeOnReadInputFormat(
       Configuration conf,
       MergeOnReadTableState tableState,
       List<DataType> fieldTypes,
@@ -163,6 +166,13 @@ public class MergeOnReadInputFormat
     this.limit = limit;
     this.emitDelete = emitDelete;
     this.schemaEvolutionContext = SchemaEvolutionContext.of(conf);
+  }
+
+  /**
+   * Returns the builder for {@link MergeOnReadInputFormat}.
+   */
+  public static Builder builder() {
+    return new Builder();
   }
 
   @Override
@@ -395,8 +405,6 @@ public class MergeOnReadInputFormat
   }
 
   private ClosableIterator<RowData> getLogFileIterator(MergeOnReadInputSplit split) {
-    final Schema tableSchema = new Schema.Parser().parse(tableState.getAvroSchema());
-//    final Schema tableSchema = AvroInternalSchemaConverter.convert(querySchema, new Schema.Parser().parse(tableState.getAvroSchema()).getName());
     final Schema requiredSchema = new Schema.Parser().parse(tableState.getRequiredAvroSchema());
     final GenericRecordBuilder recordBuilder = new GenericRecordBuilder(requiredSchema);
     final AvroToRowDataConverters.AvroToRowDataConverter avroToRowDataConverter =
@@ -421,7 +429,7 @@ public class MergeOnReadInputFormat
           Option<IndexedRecord> curAvroRecord = null;
           final HoodieAvroRecord<?> hoodieRecord = (HoodieAvroRecord) scanner.getRecords().get(curAvroKey);
           try {
-            curAvroRecord = hoodieRecord.getData().getInsertValue(tableSchema);
+            curAvroRecord = hoodieRecord.getData().getInsertValue(querySchema.getAvroSchema());
           } catch (IOException e) {
             throw new HoodieException("Get avro insert value error for key: " + curAvroKey, e);
           }
@@ -823,6 +831,53 @@ public class MergeOnReadInputFormat
       final HoodieAvroRecord<?> record = (HoodieAvroRecord) scanner.getRecords().get(curKey);
       GenericRecord historyAvroRecord = (GenericRecord) rowDataToAvroConverter.convert(tableSchema, curRow);
       return record.getData().combineAndGetUpdateValue(historyAvroRecord, tableSchema, payloadProps);
+    }
+  }
+
+  /**
+   * Builder for {@link MergeOnReadInputFormat}.
+   */
+  public static class Builder {
+    private Configuration conf;
+    private MergeOnReadTableState tableState;
+    private List<DataType> fieldTypes;
+    private String defaultPartName;
+    private long limit = -1;
+    private boolean emitDelete = false;
+
+    public Builder config(Configuration conf) {
+      this.conf = conf;
+      return this;
+    }
+
+    public Builder tableState(MergeOnReadTableState tableState) {
+      this.tableState = tableState;
+      return this;
+    }
+
+    public Builder fieldTypes(List<DataType> fieldTypes) {
+      this.fieldTypes = fieldTypes;
+      return this;
+    }
+
+    public Builder defaultPartName(String defaultPartName) {
+      this.defaultPartName = defaultPartName;
+      return this;
+    }
+
+    public Builder limit(long limit) {
+      this.limit = limit;
+      return this;
+    }
+
+    public Builder emitDelete(boolean emitDelete) {
+      this.emitDelete = emitDelete;
+      return this;
+    }
+
+    public MergeOnReadInputFormat build() {
+      return new MergeOnReadInputFormat(conf, tableState, fieldTypes,
+          defaultPartName, limit, emitDelete);
     }
   }
 

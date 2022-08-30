@@ -199,7 +199,8 @@ public class BootstrapOperator<I, O extends HoodieRecord<?>>
     if (latestCommitTime.isPresent()) {
       BaseFileUtils fileUtils = BaseFileUtils.getInstance(this.hoodieTable.getBaseFileFormat());
       TableSchemaResolver schemaResolver = new TableSchemaResolver(this.hoodieTable.getMetaClient());
-      Schema schema = schemaResolver.getTableAvroSchema();
+      InternalSchema schema = schemaResolver.getTableInternalSchemaFromCommitMetadata()
+          .orElse(new InternalSchema(schemaResolver.getTableAvroSchema()));
 
       List<FileSlice> fileSlices = this.hoodieTable.getSliceView()
           .getLatestMergedFileSlicesBeforeOrOn(partitionPath, latestCommitTime.get().getTimestamp())
@@ -231,9 +232,7 @@ public class BootstrapOperator<I, O extends HoodieRecord<?>>
             .filter(logFile -> isValidFile(logFile.getFileStatus()))
             .map(logFile -> logFile.getPath().toString())
             .collect(toList());
-        InternalSchema internalSchema = schemaResolver.getTableInternalSchemaFromCommitMetadata()
-            .orElse(InternalSchema.getEmptyInternalSchema());
-        HoodieMergedLogRecordScanner scanner = FormatUtils.logScanner(logPaths, internalSchema, latestCommitTime.get().getTimestamp(),
+        HoodieMergedLogRecordScanner scanner = FormatUtils.logScanner(logPaths, schema, latestCommitTime.get().getTimestamp(),
             writeConfig, hadoopConf);
 
         try {

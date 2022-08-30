@@ -63,7 +63,7 @@ public class InternalSchemaUtils {
     }).collect(Collectors.toList());
     // find top parent field ID. eg: a.b.c, f.g.h, only collect id of a and f ignore all child field.
     List<Integer> topParentFieldIds = new ArrayList<>();
-    names.forEach(f -> {
+    names.stream().forEach(f -> {
       int id = schema.findIdByName(f.split("\\.")[0]);
       if (!topParentFieldIds.contains(id)) {
         topParentFieldIds.add(id);
@@ -111,8 +111,10 @@ public class InternalSchemaUtils {
           Type newType = pruneType(f.type(), fieldIds);
           if (fieldIds.contains(f.fieldId())) {
             newTypes.add(f.type());
-          } else {
+          } else if (newType != null) {
             newTypes.add(newType);
+          } else {
+            newTypes.add(null);
           }
         }
         boolean changed = false;
@@ -206,7 +208,7 @@ public class InternalSchemaUtils {
     Set<Integer> ids = schema.getAllIds();
     Set<Integer> otherIds = oldSchema.getAllIds();
     Map<Integer, Pair<Type, Type>> result = new HashMap<>();
-    ids.stream().filter(otherIds::contains).forEach(f -> {
+    ids.stream().filter(f -> otherIds.contains(f)).forEach(f -> {
       if (!schema.findType(f).equals(oldSchema.findType(f))) {
         String[] fieldNameParts = schema.findfullName(f).split("\\.");
         String[] otherFieldNameParts = oldSchema.findfullName(f).split("\\.");
@@ -214,7 +216,7 @@ public class InternalSchemaUtils {
         String otherParentName = otherFieldNameParts[0];
         if (fieldNameParts.length == otherFieldNameParts.length && schema.findIdByName(parentName) == oldSchema.findIdByName(otherParentName)) {
           int index = schema.findIdByName(parentName);
-          int position = schema.getRecord().fields().stream().map(Field::fieldId).collect(Collectors.toList()).indexOf(index);
+          int position = schema.getRecord().fields().stream().map(s -> s.fieldId()).collect(Collectors.toList()).indexOf(index);
           if (!result.containsKey(position)) {
             result.put(position, Pair.of(schema.findType(parentName), oldSchema.findType(otherParentName)));
           }
@@ -261,7 +263,7 @@ public class InternalSchemaUtils {
     if (!fieldNames.isEmpty()) {
       List<String> parentNames = new ArrayList<>();
       fieldNames.descendingIterator().forEachRemaining(parentNames::add);
-      result = String.join(".", parentNames) + "." + result;
+      result = parentNames.stream().collect(Collectors.joining(".")) + "." + result;
     }
     return result;
   }

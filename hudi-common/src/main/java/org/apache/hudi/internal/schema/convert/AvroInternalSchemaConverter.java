@@ -120,7 +120,7 @@ public class AvroInternalSchemaConverter {
    */
   public static Type buildTypeFromAvroSchema(Schema schema) {
     // set flag to check this has not been visited.
-    Deque<String> visited = new LinkedList<>();
+    Deque<String> visited = new LinkedList();
     AtomicInteger nextId = new AtomicInteger(1);
     return visitAvroSchemaToBuildType(schema, visited, true, nextId);
   }

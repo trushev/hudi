@@ -34,7 +34,7 @@ import java.io.IOException;
 import java.util.Arrays;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Tests {@link FileBasedInternalSchemaStorageManager}.
@@ -80,7 +80,7 @@ public class TestFileBasedInternalSchemaStorageManager extends HoodieCommonTestH
     metaClient.reloadActiveTimeline();
     // now the residual file created by 3st persist should be removed.
     File f = new File(metaClient.getSchemaFolderName() + File.separator + "0002.schemacommit");
-    assertFalse(f.exists());
+    assertTrue(!f.exists());
     assertEquals(lastSchema, fm.getSchemaByKey("3").get());
   }
 
@@ -96,9 +96,10 @@ public class TestFileBasedInternalSchemaStorageManager extends HoodieCommonTestH
   }
 
   private InternalSchema getSimpleSchema(long versionId) {
-    Types.RecordType record = Types.RecordType.get(Arrays.asList(
+    Types.RecordType record = Types.RecordType.get(Arrays.asList(new Types.Field[] {
         Types.Field.get(0, "bool", Types.BooleanType.get()),
-        Types.Field.get(1, "int", Types.IntType.get())));
+        Types.Field.get(1, "int", Types.IntType.get()),
+    }));
     return new InternalSchema(versionId, record.fields());
   }
 }

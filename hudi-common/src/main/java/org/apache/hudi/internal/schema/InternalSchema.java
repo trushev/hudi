@@ -223,7 +223,8 @@ public class InternalSchema implements Serializable {
   public String toString() {
     return String.format("table {\n%s\n}",
         StringUtils.join(record.fields().stream()
-            .map(f -> " " + f).toArray(String[]::new), "\n"));
+            .map(f -> " " + f)
+            .collect(Collectors.toList()).toArray(new String[0]), "\n"));
   }
 
   @Override

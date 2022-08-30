@@ -540,6 +540,7 @@ public abstract class AbstractHoodieLogRecordReader {
 
     public abstract Builder withLogFilePaths(List<String> logFilePaths);
 
+    // TODO: deprecate, use InternalSchema
     public abstract Builder withReaderSchema(Schema schema);
 
     public abstract Builder withReaderSchema(InternalSchema schema);

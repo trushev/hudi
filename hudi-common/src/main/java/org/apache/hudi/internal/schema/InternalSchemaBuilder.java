@@ -86,28 +86,44 @@ public class InternalSchemaBuilder implements Serializable {
         List<T> results = new ArrayList<>();
         for (Types.Field f : record.fields()) {
           visitor.beforeField(f);
-          T result = visit(f.type(), visitor);
-          visitor.afterField(f);
+          T result;
+          try {
+            result = visit(f.type(), visitor);
+          } finally {
+            visitor.afterField(f);
+          }
           results.add(visitor.field(f, result));
         }
         return visitor.record(record, results);
       case ARRAY:
         Types.ArrayType array = (Types.ArrayType) type;
+        T elementResult;
         Types.Field elementField = array.field(array.elementId());
         visitor.beforeArrayElement(elementField);
-        T elementResult = visit(elementField.type(), visitor);
-        visitor.afterArrayElement(elementField);
+        try {
+          elementResult = visit(elementField.type(), visitor);
+        } finally {
+          visitor.afterArrayElement(elementField);
+        }
         return visitor.array(array, elementResult);
       case MAP:
         Types.MapType map = (Types.MapType) type;
+        T keyResult;
+        T valueResult;
         Types.Field keyField = map.field(map.keyId());
         visitor.beforeMapKey(keyField);
-        T keyResult = visit(map.keyType(), visitor);
-        visitor.afterMapKey(keyField);
+        try {
+          keyResult = visit(map.keyType(), visitor);
+        } finally {
+          visitor.afterMapKey(keyField);
+        }
         Types.Field valueField = map.field(map.valueId());
         visitor.beforeMapValue(valueField);
-        T valueResult = visit(map.valueType(), visitor);
-        visitor.afterMapValue(valueField);
+        try {
+          valueResult = visit(map.valueType(), visitor);
+        } finally {
+          visitor.afterMapValue(valueField);
+        }
         return visitor.map(map, keyResult, valueResult);
       default:
         return visitor.primitive((Type.PrimitiveType)type);
@@ -164,6 +180,7 @@ public class InternalSchemaBuilder implements Serializable {
         }
         return;
       default:
+        return;
     }
   }
 
@@ -242,7 +259,8 @@ public class InternalSchemaBuilder implements Serializable {
         int currentId = nextId.get();
         nextId.set(currentId + record.fields().size());
         List<Types.Field> internalFields = new ArrayList<>();
-        for (Types.Field oldField : oldFields) {
+        for (int i = 0; i < oldFields.size(); i++) {
+          Types.Field oldField = oldFields.get(i);
           Type fieldType = refreshNewId(oldField.type(), nextId);
           internalFields.add(Types.Field.get(currentId++, oldField.isOptional(), oldField.name(), fieldType, oldField.doc()));
         }

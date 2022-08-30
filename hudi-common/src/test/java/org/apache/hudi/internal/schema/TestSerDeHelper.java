@@ -51,14 +51,14 @@ public class TestSerDeHelper {
     InternalSchema convertedSchema = SerDeHelper.fromJson(result).get();
     Assertions.assertEquals(internalSchema, convertedSchema);
     // test schemas2json
-    String results = SerDeHelper.toJson(Collections.singletonList(internalSchema));
+    String results = SerDeHelper.toJson(Arrays.asList(internalSchema));
     TreeMap<Long, InternalSchema> convertedSchemas = SerDeHelper.parseSchemas(results);
     Assertions.assertEquals(1, convertedSchemas.size());
   }
 
   @Test
   public void testPrimitive2Json() {
-    Types.RecordType record = Types.RecordType.get(Arrays.asList(
+    Types.RecordType record = Types.RecordType.get(Arrays.asList(new Types.Field[] {
         Types.Field.get(0, "bool", Types.BooleanType.get()),
         Types.Field.get(1, "int", Types.IntType.get()),
         Types.Field.get(2, "long", Types.LongType.get()),
@@ -71,7 +71,8 @@ public class TestSerDeHelper {
         Types.Field.get(9, "uuid", Types.UUIDType.get()),
         Types.Field.get(10, "fixed", Types.FixedType.getFixed(10)),
         Types.Field.get(11, "binary", Types.BinaryType.get()),
-        Types.Field.get(12, "decimal", Types.DecimalType.get(10, 2))));
+        Types.Field.get(12, "decimal", Types.DecimalType.get(10, 2))
+    }));
     InternalSchema internalSchema = new InternalSchema(record.fields());
     String result = SerDeHelper.toJson(internalSchema);
     InternalSchema convertedSchema = SerDeHelper.fromJson(result).get();
@@ -80,10 +81,10 @@ public class TestSerDeHelper {
 
   @Test
   public void testSearchSchema() {
-    List<InternalSchema> schemas = new ArrayList<>();
+    List schemas = new ArrayList<>();
     for (int i = 0; i < 100; i++) {
       schemas.add(new InternalSchema(i * 10,
-          Collections.singletonList(Types.Field.get(1, true, "schema" + i * 10, Types.LongType.get()))));
+          Arrays.asList(Types.Field.get(1, true, "schema" + i * 10, Types.LongType.get()))));
     }
 
     Assertions.assertEquals(InternalSchemaUtils.searchSchema(0, schemas).getRecord().fields().get(0),
@@ -101,14 +102,14 @@ public class TestSerDeHelper {
 
   @Test
   public void testInheritSchemas() {
-    List<InternalSchema> schemas = new ArrayList<>();
+    List schemas = new ArrayList<>();
     for (int i = 0; i < 2; i++) {
       schemas.add(new InternalSchema(i,
-          Collections.singletonList(Types.Field.get(1, true, "schema" + i, Types.LongType.get()))));
+          Arrays.asList(Types.Field.get(1, true, "schema" + i, Types.LongType.get()))));
     }
     String oldSchemas = SerDeHelper.toJson(schemas);
     InternalSchema newSchema = new InternalSchema(3,
-        Collections.singletonList(Types.Field.get(1, true, "schema" + 3, Types.LongType.get())));
+        Arrays.asList(Types.Field.get(1, true, "schema" + 3, Types.LongType.get())));
 
     String finalResult = SerDeHelper.inheritSchemas(newSchema, oldSchemas);
     // convert back

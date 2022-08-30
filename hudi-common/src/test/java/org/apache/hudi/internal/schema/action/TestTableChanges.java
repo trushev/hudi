@@ -32,19 +32,19 @@ public class TestTableChanges {
 
   @Test
   public void testPrimitiveAdd() {
-    Types.RecordType record = Types.RecordType.get(Arrays.asList(
+    Types.RecordType record = Types.RecordType.get(Arrays.asList(new Types.Field[] {
         Types.Field.get(0, "col1", Types.BooleanType.get()),
         Types.Field.get(1, "col2", Types.IntType.get()),
         Types.Field.get(2, "col3", Types.LongType.get()),
-        Types.Field.get(3, "col4", Types.FloatType.get())));
+        Types.Field.get(3, "col4", Types.FloatType.get())}));
 
-    Types.RecordType checkRecord = Types.RecordType.get(Arrays.asList(
+    Types.RecordType checkRecord = Types.RecordType.get(Arrays.asList(new Types.Field[]  {
         Types.Field.get(0, "col1", Types.BooleanType.get()),
         Types.Field.get(4, true, "c1", Types.BooleanType.get(), "add c1 after col1"),
         Types.Field.get(1, "col2", Types.IntType.get()),
         Types.Field.get(5, true, "c2", Types.IntType.get(), "add c2 before col3"),
         Types.Field.get(2, "col3", Types.LongType.get()),
-        Types.Field.get(3, "col4", Types.FloatType.get())));
+        Types.Field.get(3, "col4", Types.FloatType.get())}));
 
     InternalSchema oldSchema = new InternalSchema(record.fields());
     // add c1 after 'col1', and c2 before 'col3'
@@ -116,11 +116,11 @@ public class TestTableChanges {
 
   @Test
   public void testPrimitiveDelete() {
-    Types.RecordType record = Types.RecordType.get(Arrays.asList(
+    Types.RecordType record = Types.RecordType.get(Arrays.asList(new Types.Field[] {
         Types.Field.get(0, "col1", Types.BooleanType.get()),
         Types.Field.get(1, "col2", Types.IntType.get()),
         Types.Field.get(2, "col3", Types.LongType.get()),
-        Types.Field.get(3, "col4", Types.FloatType.get())));
+        Types.Field.get(3, "col4", Types.FloatType.get())}));
     InternalSchema oldSchema = new InternalSchema(record.fields());
     TableChanges.ColumnDeleteChange deleteChange = TableChanges.ColumnDeleteChange.get(oldSchema);
     deleteChange.deleteColumn("col1");
@@ -129,9 +129,9 @@ public class TestTableChanges {
     deleteChange.deleteColumn("col1");
     deleteChange.deleteColumn("col3");
     InternalSchema newSchema = SchemaChangeUtils.applyTableChanges2Schema(oldSchema, deleteChange);
-    Types.RecordType checkRecord = Types.RecordType.get(Arrays.asList(
+    Types.RecordType checkRecord = Types.RecordType.get(Arrays.asList(new Types.Field[] {
         Types.Field.get(1, "col2", Types.IntType.get()),
-        Types.Field.get(3, "col4", Types.FloatType.get())));
+        Types.Field.get(3, "col4", Types.FloatType.get())}));
     Assertions.assertEquals(newSchema.getRecord(), checkRecord);
   }
 
@@ -169,22 +169,22 @@ public class TestTableChanges {
 
   @Test
   public void testPrimitiveUpdate() {
-    Types.RecordType record = Types.RecordType.get(Arrays.asList(
+    Types.RecordType record = Types.RecordType.get(Arrays.asList(new Types.Field[] {
         Types.Field.get(0, "col1", Types.BooleanType.get()),
         Types.Field.get(1, "col2", Types.IntType.get()),
         Types.Field.get(2, "col3", Types.LongType.get()),
-        Types.Field.get(3, "col4", Types.FloatType.get())));
+        Types.Field.get(3, "col4", Types.FloatType.get())}));
     InternalSchema oldSchema = new InternalSchema(record.fields());
     TableChanges.ColumnUpdateChange updateChange = TableChanges.ColumnUpdateChange.get(oldSchema);
     updateChange.updateColumnType("col2", Types.LongType.get())
         .updateColumnComment("col2", "alter col2 comments")
         .renameColumn("col2", "colx").addPositionChange("col2", "col4", "after");
     InternalSchema newSchema = SchemaChangeUtils.applyTableChanges2Schema(oldSchema, updateChange);
-    Types.RecordType checkedRecord = Types.RecordType.get(Arrays.asList(
+    Types.RecordType checkedRecord = Types.RecordType.get(Arrays.asList(new Types.Field[] {
         Types.Field.get(0, "col1", Types.BooleanType.get()),
         Types.Field.get(2, "col3", Types.LongType.get()),
         Types.Field.get(3, "col4", Types.FloatType.get()),
-        Types.Field.get(1, true, "colx", Types.LongType.get(), "alter col2 comments")));
+        Types.Field.get(1, true, "colx", Types.LongType.get(), "alter col2 comments")}));
     Assertions.assertEquals(newSchema.getRecord(), checkedRecord);
   }
 

@@ -34,7 +34,7 @@ import java.util.Map;
  * Schema visitor to produce name -> id map for internalSchema.
  */
 public class NameToIDVisitor extends InternalSchemaVisitor<Map<String, Integer>> {
-  private final Deque<String> fieldNames = new LinkedList<>();
+  private final Deque fieldNames = new LinkedList<>();
   private final Map<String, Integer> nameToId = new HashMap<>();
 
   @Override

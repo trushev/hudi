@@ -264,13 +264,13 @@ public class TestStreamReadOperator {
         AvroSchemaConverter.convertToSchema(TestConfigurations.ROW_TYPE).toString(),
         Collections.emptyList(),
         new String[0]);
-    MergeOnReadInputFormat inputFormat = new MergeOnReadInputFormat(
-        conf,
-        hoodieTableState,
-        rowDataType.getChildren(),
-        PARTITION_DEFAULT_NAME.defaultValue(),
-        1000L,
-        true);
+    MergeOnReadInputFormat inputFormat = MergeOnReadInputFormat.builder()
+        .config(conf)
+        .tableState(hoodieTableState)
+        .fieldTypes(rowDataType.getChildren())
+        .defaultPartName(PARTITION_DEFAULT_NAME.defaultValue()).limit(1000L)
+        .emitDelete(true)
+        .build();
 
     OneInputStreamOperatorFactory<MergeOnReadInputSplit, RowData> factory = StreamReadOperator.factory(inputFormat);
     OneInputStreamOperatorTestHarness<MergeOnReadInputSplit, RowData> harness = new OneInputStreamOperatorTestHarness<>(

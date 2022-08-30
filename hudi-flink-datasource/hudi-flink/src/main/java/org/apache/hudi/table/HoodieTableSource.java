@@ -424,15 +424,16 @@ public class HoodieTableSource implements
         AvroSchemaConverter.convertToSchema(requiredRowType).toString(),
         inputSplits,
         conf.getString(FlinkOptions.RECORD_KEY_FIELD).split(","));
-    return new MergeOnReadInputFormat(
-        this.conf,
-        hoodieTableState,
+    return MergeOnReadInputFormat.builder()
+        .config(this.conf)
+        .tableState(hoodieTableState)
         // use the explicit fields' data type because the AvroSchemaConverter
         // is not very stable.
-        rowDataType.getChildren(),
-        conf.getString(FlinkOptions.PARTITION_DEFAULT_NAME),
-        this.limit,
-        emitDelete);
+        .fieldTypes(rowDataType.getChildren())
+        .defaultPartName(conf.getString(FlinkOptions.PARTITION_DEFAULT_NAME))
+        .limit(this.limit)
+        .emitDelete(emitDelete)
+        .build();
   }
 
   private InputFormat<RowData, ?> baseFileOnlyInputFormat() {

@@ -40,10 +40,12 @@ public class TestInternalSchemaUtils {
     prunedCols.add(0);
     prunedCols.add(2);
     InternalSchema prunedSchema = InternalSchemaUtils.pruneInternalSchemaByID(originSchema, prunedCols, null);
-    InternalSchema checkedSchema = new InternalSchema(Arrays.asList(Types.Field.get(0, "bool", Types.BooleanType.get()),
+    InternalSchema checkedSchema = new InternalSchema(Arrays.asList(new Types.Field[] {
+        Types.Field.get(0, "bool", Types.BooleanType.get()),
         Types.Field.get(2, "long", Types.LongType.get()),
         Types.Field.get(3, "float", Types.FloatType.get()),
-        Types.Field.get(4, "double", Types.DoubleType.get())));
+        Types.Field.get(4, "double", Types.DoubleType.get())
+    }));
     Assertions.assertEquals(prunedSchema, checkedSchema);
 
     // nest schema
@@ -54,7 +56,7 @@ public class TestInternalSchemaUtils {
     prunedNestCols.add(1);
     prunedNestCols.add(5);
     prunedNestCols.add(11);
-    InternalSchemaUtils.pruneInternalSchemaByID(originNestSchema, prunedNestCols, null);
+    InternalSchema prunedNestSchema = InternalSchemaUtils.pruneInternalSchemaByID(originNestSchema, prunedNestCols, null);
   }
 
   @Test
@@ -87,11 +89,12 @@ public class TestInternalSchemaUtils {
   }
 
   public Types.RecordType getSimpleRecordType() {
-    return Types.RecordType.get(Arrays.asList(
+    return Types.RecordType.get(Arrays.asList(new Types.Field[] {
         Types.Field.get(0, "bool", Types.BooleanType.get()),
         Types.Field.get(1, "int", Types.IntType.get()),
         Types.Field.get(2, "long", Types.LongType.get()),
         Types.Field.get(3, "float", Types.FloatType.get()),
-        Types.Field.get(4, "double", Types.DoubleType.get())));
+        Types.Field.get(4, "double", Types.DoubleType.get())
+    }));
   }
 }
