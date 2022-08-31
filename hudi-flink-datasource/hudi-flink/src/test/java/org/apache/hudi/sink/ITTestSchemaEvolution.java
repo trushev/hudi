@@ -60,11 +60,8 @@ import static org.apache.hudi.utils.TestConfigurations.ROW_TYPE_EVOLUTION;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 public class ITTestSchemaEvolution extends AbstractTestBase {
-  @TempDir File tempFile;
-  StreamExecutionEnvironment env;
-  StreamTableEnvironment tEnv;
 
-  String[] expectedMergedResult = new String[] {
+  static final String[] EXPECTED_MERGED_RESULT = new String[] {
       "+I[Danny, 10000.1, 23]",
       "+I[Stephen, null, 33]",
       "+I[Julian, 30000.3, 53]",
@@ -76,7 +73,7 @@ public class ITTestSchemaEvolution extends AbstractTestBase {
       "+I[Alice, 90000.9, unknown]"
   };
 
-  String[] expectedUnMergedResult = new String[] {
+  static final String[] EXPECTED_UNMERGED_RESULT = new String[] {
       "+I[Danny, null, 23]",
       "+I[Stephen, null, 33]",
       "+I[Julian, null, 53]",
@@ -89,6 +86,10 @@ public class ITTestSchemaEvolution extends AbstractTestBase {
       "+I[Danny, 10000.1, 23]",
       "+I[Julian, 30000.3, 53]"
   };
+
+  @TempDir File tempFile;
+  StreamExecutionEnvironment env;
+  StreamTableEnvironment tEnv;
 
   @BeforeEach
   public void setUp() {
@@ -132,7 +133,7 @@ public class ITTestSchemaEvolution extends AbstractTestBase {
     optionMap.put(FlinkOptions.READ_AS_STREAMING.key(), true);
     optionMap.put(FlinkOptions.READ_START_COMMIT.key(), FlinkOptions.START_COMMIT_EARLIEST);
     optionMap.put(FlinkOptions.CHANGELOG_ENABLED.key(), true);
-    testRead(optionMap, expectedUnMergedResult);
+    testRead(optionMap, EXPECTED_UNMERGED_RESULT);
   }
 
   @Test
@@ -149,7 +150,7 @@ public class ITTestSchemaEvolution extends AbstractTestBase {
     optionMap.put(FlinkOptions.TABLE_TYPE.key(), FlinkOptions.TABLE_TYPE_MERGE_ON_READ);
     optionMap.put(FlinkOptions.COMPACTION_DELTA_COMMITS.key(), 1);
     optionMap.put(FlinkOptions.MERGE_TYPE.key(), FlinkOptions.REALTIME_SKIP_MERGE);
-    testRead(optionMap, true, expectedUnMergedResult);
+    testRead(optionMap, true, EXPECTED_UNMERGED_RESULT);
   }
 
   @SuppressWarnings({"SqlDialectInspection", "SqlNoDataSourceInspection"})
@@ -158,14 +159,14 @@ public class ITTestSchemaEvolution extends AbstractTestBase {
     OptionMap optionMap = defaultOptionMap(tempFile.getAbsolutePath());
     optionMap.put(FlinkOptions.TABLE_TYPE.key(), FlinkOptions.TABLE_TYPE_MERGE_ON_READ);
     optionMap.put(FlinkOptions.COMPACTION_DELTA_COMMITS.key(), 1);
-    testRead(optionMap, new String[0]);
+    testRead(optionMap);
     try (HoodieFlinkWriteClient<?> writeClient = StreamerUtil.createWriteClient(optionMap.toConfig())) {
       Option<String> compactionInstant = writeClient.scheduleCompaction(Option.empty());
       writeClient.compact(compactionInstant.get());
     }
     //language=SQL
     TableResult tableResult = tEnv.executeSql("select first_name, salary, age from t1");
-    checkAnswer(tableResult, expectedMergedResult);
+    checkAnswer(tableResult, EXPECTED_MERGED_RESULT);
   }
 
   private void testRead(OptionMap optionMap) throws Exception {
@@ -177,7 +178,7 @@ public class ITTestSchemaEvolution extends AbstractTestBase {
   }
 
   private void testRead(OptionMap optionMap, boolean shouldCompact) throws Exception {
-    testRead(optionMap, shouldCompact, expectedMergedResult);
+    testRead(optionMap, shouldCompact, EXPECTED_MERGED_RESULT);
   }
 
   /**
@@ -312,8 +313,8 @@ public class ITTestSchemaEvolution extends AbstractTestBase {
       }
     }
 
-    void put(Object key, Object value) {
-      map.put(Objects.toString(key), Objects.toString(value));
+    void put(String key, Object value) {
+      map.put(key, Objects.toString(value));
     }
 
     Configuration toConfig() {

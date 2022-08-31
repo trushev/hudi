@@ -192,9 +192,9 @@ class HoodieMergeOnReadRDD(@transient sc: SparkContext,
     private val requiredSchemaSafeAvroProjection = SafeAvroProjection.create(logFileReaderAvroSchema, requiredAvroSchema)
 
     private var logScanner = {
-      val internalSchema = tableSchema.internalSchema.getOrElse(InternalSchema.getEmptyInternalSchema)
-      HoodieMergeOnReadRDD.scanLog(split.logFiles, getPartitionPath(split), logFileReaderAvroSchema, tableState,
-        maxCompactionMemoryInBytes, config, internalSchema)
+      val internalSchema = tableSchema.internalSchema.getOrElse(new InternalSchema(logFileReaderAvroSchema))
+      HoodieMergeOnReadRDD.scanLog(split.logFiles, getPartitionPath(split), internalSchema, tableState,
+        maxCompactionMemoryInBytes, config)
     }
 
     private val logRecords = logScanner.getRecords.asScala
@@ -342,10 +342,10 @@ private object HoodieMergeOnReadRDD {
 
   def scanLog(logFiles: List[HoodieLogFile],
               partitionPath: Path,
-              logSchema: Schema,
+              logSchema: InternalSchema,
               tableState: HoodieTableState,
               maxCompactionMemoryInBytes: Long,
-              hadoopConf: Configuration, internalSchema: InternalSchema = InternalSchema.getEmptyInternalSchema): HoodieMergedLogRecordScanner = {
+              hadoopConf: Configuration): HoodieMergedLogRecordScanner = {
     val tablePath = tableState.tablePath
     val fs = FSUtils.getFs(tablePath, hadoopConf)
 
@@ -380,7 +380,6 @@ private object HoodieMergeOnReadRDD {
             HoodieRealtimeConfig.DEFAULT_COMPACTION_LAZY_BLOCK_READ_ENABLED).toBoolean)
             .getOrElse(false))
         .withReverseReader(false)
-        .withInternalSchema(internalSchema)
         .withBufferSize(
           hadoopConf.getInt(HoodieRealtimeConfig.MAX_DFS_STREAM_BUFFER_SIZE_PROP,
             HoodieRealtimeConfig.DEFAULT_MAX_DFS_STREAM_BUFFER_SIZE))
