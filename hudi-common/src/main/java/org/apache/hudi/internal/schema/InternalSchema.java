@@ -106,7 +106,7 @@ public class InternalSchema implements Serializable {
    * Get all columns full name.
    */
   public List<String> getAllColsFullName() {
-    return record.fields().stream().map(Field::name).collect(Collectors.toList());
+    return record.fieldNames();
   }
 
   /**
@@ -145,11 +145,7 @@ public class InternalSchema implements Serializable {
    * @return fullName of field of
    */
   public String findfullName(int id) {
-    Field field = record.field(id);
-    if (field == null) {
-      return null;
-    }
-    return field.name();
+    return record.fieldName(id);
   }
 
   /**

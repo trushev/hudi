@@ -470,12 +470,15 @@ public class Types {
     private final List<Field> fields;
     private final Map<Integer, Field> idToField;
     private final Map<String, Integer> nameToId;
+    private final Map<Integer, String> idToName;
 
     private RecordType(List<Field> fields) {
       // TODO: what if name is not lowercase or empty?
       this.fields = Collections.unmodifiableList(new ArrayList<>(fields));
       this.idToField = Collections.unmodifiableMap(InternalSchemaBuilder.buildIdToField(fields));
       this.nameToId = Collections.unmodifiableMap(InternalSchemaBuilder.buildNameToId(this));
+      this.idToName = Collections.unmodifiableMap(nameToId.entrySet().stream()
+          .collect(Collectors.toMap(Map.Entry::getValue, Map.Entry::getKey)));
     }
 
     public Set<Integer> ids() {
@@ -498,6 +501,15 @@ public class Types {
     @Override
     public Field field(int id) {
       return idToField.get(id);
+    }
+
+    public String fieldName(int id) {
+      String result = idToName.get(id);
+      return result == null ? "" : result;
+    }
+
+    public List<String> fieldNames() {
+      return new ArrayList<>(idToName.values());
     }
 
     @Override
