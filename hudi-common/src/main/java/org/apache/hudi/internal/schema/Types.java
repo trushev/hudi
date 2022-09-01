@@ -475,8 +475,7 @@ public class Types {
       // TODO: what if name is not lowercase or empty?
       this.fields = Collections.unmodifiableList(new ArrayList<>(fields));
       this.idToField = Collections.unmodifiableMap(InternalSchemaBuilder.buildIdToField(fields));
-      this.nameToId = Collections.unmodifiableMap(this.idToField.entrySet().stream()
-          .collect(Collectors.toMap(e -> e.getValue().name(), Map.Entry::getKey)));
+      this.nameToId = Collections.unmodifiableMap(InternalSchemaBuilder.buildNameToId(this));
     }
 
     public Set<Integer> ids() {
