@@ -21,6 +21,7 @@ package org.apache.hudi.sink;
 import org.apache.hudi.client.HoodieFlinkWriteClient;
 import org.apache.hudi.common.table.HoodieTableConfig;
 import org.apache.hudi.common.util.Option;
+import org.apache.hudi.common.util.StringUtils;
 import org.apache.hudi.config.HoodieWriteConfig;
 import org.apache.hudi.configuration.FlinkOptions;
 import org.apache.hudi.internal.schema.Types;
@@ -46,12 +47,13 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.io.File;
+import java.io.IOException;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Set;
+import java.util.concurrent.ExecutionException;
 import java.util.stream.Collectors;
 
 import static org.apache.hudi.internal.schema.action.TableChange.ColumnPositionChange.ColumnPositionType.AFTER;
@@ -93,74 +95,73 @@ public class ITTestSchemaEvolution extends AbstractTestBase {
 
   @BeforeEach
   public void setUp() {
-    env = StreamExecutionEnvironment.getExecutionEnvironment();
-    env.setParallelism(1);
+    env = StreamExecutionEnvironment.getExecutionEnvironment().setParallelism(1);
     tEnv = StreamTableEnvironment.create(env);
   }
 
   @Test
   public void testCopyOnWriteInputFormat() throws Exception {
-    testRead(defaultOptionMap(tempFile.getAbsolutePath()));
+    testSchemaEvolution(defaultTableOptions(tempFile.getAbsolutePath()));
   }
 
   @Test
   public void testMergeOnReadInputFormatBaseFileOnlyIterator() throws Exception {
-    OptionMap optionMap = defaultOptionMap(tempFile.getAbsolutePath());
-    optionMap.put(FlinkOptions.READ_AS_STREAMING.key(), true);
-    optionMap.put(FlinkOptions.READ_START_COMMIT.key(), FlinkOptions.START_COMMIT_EARLIEST);
-    testRead(optionMap);
+    TableOptions tableOptions = defaultTableOptions(tempFile.getAbsolutePath())
+        .withOption(FlinkOptions.READ_AS_STREAMING.key(), true)
+        .withOption(FlinkOptions.READ_START_COMMIT.key(), FlinkOptions.START_COMMIT_EARLIEST);
+    testSchemaEvolution(tableOptions);
   }
 
   @Test
   public void testMergeOnReadInputFormatBaseFileOnlyFilteringIterator() throws Exception {
-    OptionMap optionMap = defaultOptionMap(tempFile.getAbsolutePath());
-    optionMap.put(FlinkOptions.READ_AS_STREAMING.key(), true);
-    optionMap.put(FlinkOptions.READ_START_COMMIT.key(), 1);
-    testRead(optionMap);
+    TableOptions tableOptions = defaultTableOptions(tempFile.getAbsolutePath())
+        .withOption(FlinkOptions.READ_AS_STREAMING.key(), true)
+        .withOption(FlinkOptions.READ_START_COMMIT.key(), 1);
+    testSchemaEvolution(tableOptions);
   }
 
   @Test
   public void testMergeOnReadInputFormatLogFileOnlyIteratorGetLogFileIterator() throws Exception {
-    OptionMap optionMap = defaultOptionMap(tempFile.getAbsolutePath());
-    optionMap.put(FlinkOptions.TABLE_TYPE.key(), FlinkOptions.TABLE_TYPE_MERGE_ON_READ);
-    testRead(optionMap);
+    TableOptions tableOptions = defaultTableOptions(tempFile.getAbsolutePath())
+        .withOption(FlinkOptions.TABLE_TYPE.key(), FlinkOptions.TABLE_TYPE_MERGE_ON_READ);
+    testSchemaEvolution(tableOptions);
   }
 
   @Test
   public void testMergeOnReadInputFormatLogFileOnlyIteratorGetUnMergedLogFileIterator() throws Exception {
-    OptionMap optionMap = defaultOptionMap(tempFile.getAbsolutePath());
-    optionMap.put(FlinkOptions.TABLE_TYPE.key(), FlinkOptions.TABLE_TYPE_MERGE_ON_READ);
-    optionMap.put(FlinkOptions.READ_AS_STREAMING.key(), true);
-    optionMap.put(FlinkOptions.READ_START_COMMIT.key(), FlinkOptions.START_COMMIT_EARLIEST);
-    optionMap.put(FlinkOptions.CHANGELOG_ENABLED.key(), true);
-    testRead(optionMap, EXPECTED_UNMERGED_RESULT);
+    TableOptions tableOptions = defaultTableOptions(tempFile.getAbsolutePath())
+        .withOption(FlinkOptions.TABLE_TYPE.key(), FlinkOptions.TABLE_TYPE_MERGE_ON_READ)
+        .withOption(FlinkOptions.READ_AS_STREAMING.key(), true)
+        .withOption(FlinkOptions.READ_START_COMMIT.key(), FlinkOptions.START_COMMIT_EARLIEST)
+        .withOption(FlinkOptions.CHANGELOG_ENABLED.key(), true);
+    testSchemaEvolution(tableOptions, EXPECTED_UNMERGED_RESULT);
   }
 
   @Test
   public void testMergeOnReadInputFormatMergeIterator() throws Exception {
-    OptionMap optionMap = defaultOptionMap(tempFile.getAbsolutePath());
-    optionMap.put(FlinkOptions.TABLE_TYPE.key(), FlinkOptions.TABLE_TYPE_MERGE_ON_READ);
-    optionMap.put(FlinkOptions.COMPACTION_DELTA_COMMITS.key(), 1);
-    testRead(optionMap, true);
+    TableOptions tableOptions = defaultTableOptions(tempFile.getAbsolutePath())
+        .withOption(FlinkOptions.TABLE_TYPE.key(), FlinkOptions.TABLE_TYPE_MERGE_ON_READ)
+        .withOption(FlinkOptions.COMPACTION_DELTA_COMMITS.key(), 1);
+    testSchemaEvolution(tableOptions, true);
   }
 
   @Test
   public void testMergeOnReadInputFormatSkipMergeIterator() throws Exception {
-    OptionMap optionMap = defaultOptionMap(tempFile.getAbsolutePath());
-    optionMap.put(FlinkOptions.TABLE_TYPE.key(), FlinkOptions.TABLE_TYPE_MERGE_ON_READ);
-    optionMap.put(FlinkOptions.COMPACTION_DELTA_COMMITS.key(), 1);
-    optionMap.put(FlinkOptions.MERGE_TYPE.key(), FlinkOptions.REALTIME_SKIP_MERGE);
-    testRead(optionMap, true, EXPECTED_UNMERGED_RESULT);
+    TableOptions tableOptions = defaultTableOptions(tempFile.getAbsolutePath())
+        .withOption(FlinkOptions.TABLE_TYPE.key(), FlinkOptions.TABLE_TYPE_MERGE_ON_READ)
+        .withOption(FlinkOptions.COMPACTION_DELTA_COMMITS.key(), 1)
+        .withOption(FlinkOptions.MERGE_TYPE.key(), FlinkOptions.REALTIME_SKIP_MERGE);
+    testSchemaEvolution(tableOptions, true, EXPECTED_UNMERGED_RESULT);
   }
 
   @SuppressWarnings({"SqlDialectInspection", "SqlNoDataSourceInspection"})
   @Test
   public void testCompaction() throws Exception {
-    OptionMap optionMap = defaultOptionMap(tempFile.getAbsolutePath());
-    optionMap.put(FlinkOptions.TABLE_TYPE.key(), FlinkOptions.TABLE_TYPE_MERGE_ON_READ);
-    optionMap.put(FlinkOptions.COMPACTION_DELTA_COMMITS.key(), 1);
-    testRead(optionMap);
-    try (HoodieFlinkWriteClient<?> writeClient = StreamerUtil.createWriteClient(optionMap.toConfig())) {
+    TableOptions tableOptions = defaultTableOptions(tempFile.getAbsolutePath())
+        .withOption(FlinkOptions.TABLE_TYPE.key(), FlinkOptions.TABLE_TYPE_MERGE_ON_READ)
+        .withOption(FlinkOptions.COMPACTION_DELTA_COMMITS.key(), 1);
+    testSchemaEvolution(tableOptions);
+    try (HoodieFlinkWriteClient<?> writeClient = StreamerUtil.createWriteClient(tableOptions.toConfig())) {
       Option<String> compactionInstant = writeClient.scheduleCompaction(Option.empty());
       writeClient.compact(compactionInstant.get());
     }
@@ -169,27 +170,26 @@ public class ITTestSchemaEvolution extends AbstractTestBase {
     checkAnswer(tableResult, EXPECTED_MERGED_RESULT);
   }
 
-  private void testRead(OptionMap optionMap) throws Exception {
-    testRead(optionMap, false);
+  private void testSchemaEvolution(TableOptions tableOptions) throws Exception {
+    testSchemaEvolution(tableOptions, false);
   }
 
-  private void testRead(OptionMap optionMap, String... expectedResult) throws Exception {
-    testRead(optionMap, false, expectedResult);
+  private void testSchemaEvolution(TableOptions tableOptions, String... expectedResult) throws Exception {
+    testSchemaEvolution(tableOptions, false, expectedResult);
   }
 
-  private void testRead(OptionMap optionMap, boolean shouldCompact) throws Exception {
-    testRead(optionMap, shouldCompact, EXPECTED_MERGED_RESULT);
+  private void testSchemaEvolution(TableOptions tableOptions, boolean shouldCompact) throws Exception {
+    testSchemaEvolution(tableOptions, shouldCompact, EXPECTED_MERGED_RESULT);
   }
 
-  /**
-   * 1) Write data with schema1
-   * 2) Compaction (optional)
-   * 3) Evolution schema1 => schema2
-   * 4) Write data with schema2
-   * 5) Read all data
-   */
-  @SuppressWarnings({"SqlDialectInspection", "SqlNoDataSourceInspection"})
-  private void testRead(OptionMap optionMap, boolean shouldCompact, String... expectedResult) throws Exception {
+  private void testSchemaEvolution(TableOptions tableOptions, boolean shouldCompact, String... expectedResult) throws Exception {
+    writeTableWithSchema1(tableOptions);
+    changeTableSchema(tableOptions, shouldCompact);
+    writeTableWithSchema2(tableOptions);
+    checkAnswer(tEnv.executeSql("select first_name, salary, age from t1"), expectedResult);
+  }
+
+  private void writeTableWithSchema1(TableOptions tableOptions) throws ExecutionException, InterruptedException {
     //language=SQL
     tEnv.executeSql(""
         + "create table t1 ("
@@ -198,7 +198,7 @@ public class ITTestSchemaEvolution extends AbstractTestBase {
         + "  age int,"
         + "  ts timestamp,"
         + "  `partition` string"
-        + ") partitioned by (`partition`) with (" + optionMap + ")"
+        + ") partitioned by (`partition`) with (" + tableOptions + ")"
     );
     //language=SQL
     tEnv.executeSql(""
@@ -219,9 +219,11 @@ public class ITTestSchemaEvolution extends AbstractTestBase {
         + "  ('id8', 'Han', 56, '2000-01-01 00:00:08', 'par4')"
         + ") as A(uuid, name, age, ts, `partition`)"
     ).await();
+  }
 
-    try (HoodieFlinkWriteClient<?> writeClient = StreamerUtil.createWriteClient(optionMap.toConfig())) {
-      if (shouldCompact) {
+  private void changeTableSchema(TableOptions tableOptions, boolean shouldCompactBeforeSchemaChanges) throws IOException {
+    try (HoodieFlinkWriteClient<?> writeClient = StreamerUtil.createWriteClient(tableOptions.toConfig())) {
+      if (shouldCompactBeforeSchemaChanges) {
         Option<String> compactionInstant = writeClient.scheduleCompaction(Option.empty());
         writeClient.compact(compactionInstant.get());
       }
@@ -230,10 +232,14 @@ public class ITTestSchemaEvolution extends AbstractTestBase {
       writeClient.renameColumn("name", "first_name");
       writeClient.updateColumnType("age", Types.StringType.get());
     }
+  }
 
+  private void writeTableWithSchema2(TableOptions tableOptions) throws ExecutionException, InterruptedException {
+    tableOptions
+        .withOption(FlinkOptions.SOURCE_AVRO_SCHEMA.key(), AvroSchemaConverter.convertToSchema(ROW_TYPE_EVOLUTION));
+
+    //language=SQL
     tEnv.executeSql("drop table t1");
-    optionMap.put(FlinkOptions.SOURCE_AVRO_SCHEMA.key(), AvroSchemaConverter.convertToSchema(ROW_TYPE_EVOLUTION));
-
     //language=SQL
     tEnv.executeSql(""
         + "create table t1 ("
@@ -243,7 +249,7 @@ public class ITTestSchemaEvolution extends AbstractTestBase {
         + "  salary double,"
         + "  ts timestamp,"
         + "  `partition` string"
-        + ") partitioned by (`partition`) with (" + optionMap + ")"
+        + ") partitioned by (`partition`) with (" + tableOptions + ")"
     );
     //language=SQL
     tEnv.executeSql(""
@@ -260,13 +266,10 @@ public class ITTestSchemaEvolution extends AbstractTestBase {
         + "  ('id3', 'Julian', '53', 30000.3, '2000-01-01 00:00:03', 'par2')"
         + ") as A(uuid, first_name, age, salary, ts, `partition`)"
     ).await();
-
-    TableResult tableResult = tEnv.executeSql("select first_name, salary, age from t1");
-    checkAnswer(tableResult, expectedResult);
   }
 
-  private OptionMap defaultOptionMap(String tablePath) {
-    return new OptionMap(
+  private TableOptions defaultTableOptions(String tablePath) {
+    return new TableOptions(
         FactoryUtil.CONNECTOR.key(), HoodieTableFactory.FACTORY_ID,
         FlinkOptions.PATH.key(), tablePath,
         FlinkOptions.TABLE_TYPE.key(), FlinkOptions.TABLE_TYPE_COPY_ON_WRITE,
@@ -277,7 +280,7 @@ public class ITTestSchemaEvolution extends AbstractTestBase {
         KeyGeneratorOptions.PARTITIONPATH_FIELD_NAME.key(), "partition",
         KeyGeneratorOptions.HIVE_STYLE_PARTITIONING_ENABLE.key(), true,
         HoodieWriteConfig.KEYGENERATOR_CLASS_NAME.key(), ComplexAvroKeyGenerator.class.getName(),
-        FlinkOptions.WRITE_BATCH_SIZE.key(), 0.000001, // trigger flush after each record
+        FlinkOptions.WRITE_BATCH_SIZE.key(), 0.000001, // each record triggers flush
         FlinkOptions.SOURCE_AVRO_SCHEMA.key(), AvroSchemaConverter.convertToSchema(ROW_TYPE),
         FlinkOptions.READ_TASKS.key(), 1,
         FlinkOptions.WRITE_TASKS.key(), 1,
@@ -288,33 +291,33 @@ public class ITTestSchemaEvolution extends AbstractTestBase {
         FlinkOptions.SCHEMA_EVOLUTION_ENABLED.key(), true);
   }
 
-  private void checkAnswer(TableResult actualResult, String... expectedResult) {
+  private void checkAnswer(TableResult actualResult, String... expectedResult) throws Exception {
     Set<String> expected = new HashSet<>(Arrays.asList(expectedResult));
     Set<String> actual = new HashSet<>(expected.size());
     try (CloseableIterator<Row> iterator = actualResult.collect()) {
       for (int i = 0; i < expected.size() && iterator.hasNext(); i++) {
         actual.add(iterator.next().toString());
       }
-    } catch (Exception e) {
-      throw new RuntimeException(e);
     }
     assertEquals(expected, actual);
   }
 
-  private static final class OptionMap {
+  private static final class TableOptions {
     private final Map<String, String> map = new HashMap<>();
 
-    OptionMap(Object... options) {
+    TableOptions(Object... options) {
       Preconditions.checkArgument(options.length % 2 == 0);
       for (int i = 0; i < options.length; i += 2) {
-        String key = Objects.toString(options[i]);
-        String value = Objects.toString(options[i + 1]);
-        map.put(key, value);
+        withOption(options[i].toString(), options[i + 1]);
       }
     }
 
-    void put(String key, Object value) {
-      map.put(key, Objects.toString(value));
+    TableOptions withOption(String optionName, Object optionValue) {
+      if (StringUtils.isNullOrEmpty(optionName)) {
+        throw new IllegalArgumentException("optionName must be presented");
+      }
+      map.put(optionName, optionValue.toString());
+      return this;
     }
 
     Configuration toConfig() {
