@@ -90,12 +90,11 @@ public class ITTestSchemaEvolution extends AbstractTestBase {
   };
 
   @TempDir File tempFile;
-  StreamExecutionEnvironment env;
   StreamTableEnvironment tEnv;
 
   @BeforeEach
   public void setUp() {
-    env = StreamExecutionEnvironment.getExecutionEnvironment().setParallelism(1);
+    StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment().setParallelism(1);
     tEnv = StreamTableEnvironment.create(env);
   }
 
