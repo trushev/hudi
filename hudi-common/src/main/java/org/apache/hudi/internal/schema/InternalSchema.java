@@ -38,7 +38,7 @@ public class InternalSchema implements Serializable {
 
   public static final long DEFAULT_VERSION_ID = 0;
 
-  private static final InternalSchema EMPTY_SCHEMA = new InternalSchema(-1, Collections.emptyList());
+  private static final InternalSchema EMPTY_SCHEMA = new InternalSchema(Collections.emptyList());
 
   private final RecordType record;
   private transient Schema avroSchema;
@@ -64,7 +64,7 @@ public class InternalSchema implements Serializable {
   }
 
   public InternalSchema(Schema avroSchema) {
-    this(RecordType.get(Collections.emptyList()), avroSchema, -1, -1, false);
+    this((RecordType) AvroInternalSchemaConverter.convertToField(avroSchema), avroSchema, -1, DEFAULT_VERSION_ID, false);
   }
 
   private InternalSchema(RecordType record, int maxColumnId, long versionId) {
@@ -84,7 +84,7 @@ public class InternalSchema implements Serializable {
   }
 
   public boolean isEmptySchema() {
-    return versionId < 0 || record.fields().isEmpty();
+    return record.fields().isEmpty();
   }
 
   public boolean isEvolutionEnabled() {

@@ -28,7 +28,6 @@ import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
@@ -42,20 +41,6 @@ public class InternalSchemaBuilder implements Serializable {
   }
 
   private InternalSchemaBuilder() {
-  }
-
-
-  /**
-   * Build a mapping from id to full field name for a internal Type.
-   * if a field y belong to a struct filed x, then the full name of y is x.y
-   *
-   * @param type hoodie internal type
-   * @return a mapping from id to full field name
-   */
-  public static Map<Integer, String> buildIdToName(Type type) {
-    Map<Integer, String> result = new HashMap<>();
-    buildNameToId(type).forEach((k, v) -> result.put(v, k));
-    return result;
   }
 
   /**
@@ -128,18 +113,6 @@ public class InternalSchemaBuilder implements Serializable {
       default:
         return visitor.primitive((Type.PrimitiveType)type);
     }
-  }
-
-  /**
-   * Build a mapping from id to field for a internal Type.
-   *
-   * @param type hoodie internal type
-   * @return a mapping from id to field
-   */
-  public static Map<Integer, Types.Field> buildIdToField(Type type) {
-    Map<Integer, Types.Field> idToField = new HashMap<>();
-    getBuilder().visitIdToField(type, idToField);
-    return idToField;
   }
 
   public static Map<Integer, Types.Field> buildIdToField(List<Types.Field> fields) {

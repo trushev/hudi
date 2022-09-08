@@ -193,9 +193,8 @@ public class MergeOnReadInputFormat
       actualFieldTypes = fieldTypes;
     }
 
-    IteratorType iteratorType = IteratorType.getIteratorType(split, conf);
-    switch (iteratorType) {
-      case BASE_FILE_ONLY_FILTERING: {
+    if (!(split.getLogPaths().isPresent() && split.getLogPaths().get().size() > 0)) {
+      if (split.getInstantRange().isPresent()) {
         // base file only with commit time filtering
         this.iterator = new BaseFileOnlyFilteringIterator(
             split.getInstantRange().get(),
@@ -204,96 +203,55 @@ public class MergeOnReadInputFormat
         RowDataProjection projection = getCastProjection(positions)
             .orElse(RowDataProjection.instance(tableState.getRequiredRowType(), positions));
         projectRecordIterator(projection);
-        break;
-      }
-      case BASE_FILE_ONLY: {
+      } else {
         // base file only
         this.iterator = new BaseFileOnlyIterator(getRequiredSchemaReader(split.getBasePath().get()));
         projectRecordIterator();
-        break;
       }
-      case LOG_FILE_ONLY_UNMERGED: {
+    } else if (!split.getBasePath().isPresent()) {
+      if (OptionsResolver.emitChangelog(conf)) {
         this.iterator = new LogFileOnlyIterator(getUnMergedLogFileIterator(split));
-        projectRecordIterator();
-        break;
-      }
-      case LOG_FILE_ONLY: {
+      } else {
         this.iterator = new LogFileOnlyIterator(getLogFileIterator(split));
-        projectRecordIterator();
-        break;
       }
-      case BASE_LOG_FILE_SKIP_MERGE: {
-        RecordIterator baseFileIterator = new BaseFileOnlyIterator(getRequiredSchemaReader(split.getBasePath().get()));
-        this.iterator = new SkipMergeIterator(
-            getCastProjection().map(pr -> (RecordIterator) new RecordIterator.ProjectionIterator(baseFileIterator, pr)).orElse(baseFileIterator),
-            getLogFileIterator(split));
-        break;
-      }
-      case BASE_LOG_FILE_MERGE: {
-        RowDataProjection projection = getCastProjection(requiredPos)
-            .orElse(RowDataProjection.instance(tableState.getRequiredRowType(), requiredPos));
-        Option<RowDataProjection> projectionBeforeMerge = schemaEvolutionContext.map(context -> {
-          CastMap castMap = context.getCastMap(querySchema, actualSchema);
-          int[] positions = IntStream.range(0, actualFieldTypes.size()).toArray();
-          return new RowDataCastProjection(SchemaEvolutionContext.project(actualFieldTypes, positions), positions, castMap);
-        });
-        this.iterator = new MergeIterator(
-            conf,
-            hadoopConf,
-            split,
-            this.tableState.getRowType(),
-            this.tableState.getRequiredRowType(),
-            new Schema.Parser().parse(this.tableState.getAvroSchema()),
-            new Schema.Parser().parse(this.tableState.getRequiredAvroSchema()),
-            this.querySchema,
-            projection,
-            projectionBeforeMerge,
-            this.requiredPos,
-            this.emitDelete,
-            this.tableState.getOperationPos(),
-            getFullSchemaReader(split.getBasePath().get()));
-        break;
-      }
-      default:
-        throw new IllegalStateException(iteratorType.toString());
+      projectRecordIterator();
+    } else if (split.getMergeType().equals(FlinkOptions.REALTIME_SKIP_MERGE)) {
+      RecordIterator baseFileIterator = new BaseFileOnlyIterator(getRequiredSchemaReader(split.getBasePath().get()));
+      this.iterator = new SkipMergeIterator(
+          getCastProjection().map(pr -> (RecordIterator) new RecordIterator.ProjectionIterator(baseFileIterator, pr)).orElse(baseFileIterator),
+          getLogFileIterator(split));
+    } else if (split.getMergeType().equals(FlinkOptions.REALTIME_PAYLOAD_COMBINE)) {
+      RowDataProjection projection = getCastProjection(requiredPos)
+          .orElse(RowDataProjection.instance(tableState.getRequiredRowType(), requiredPos));
+      Option<RowDataProjection> projectionBeforeMerge = schemaEvolutionContext.map(context -> {
+        CastMap castMap = context.getCastMap(querySchema, actualSchema);
+        int[] positions = IntStream.range(0, actualFieldTypes.size()).toArray();
+        return new RowDataCastProjection(SchemaEvolutionContext.project(actualFieldTypes, positions), positions, castMap);
+      });
+      this.iterator = new MergeIterator(
+          conf,
+          hadoopConf,
+          split,
+          this.tableState.getRowType(),
+          this.tableState.getRequiredRowType(),
+          new Schema.Parser().parse(this.tableState.getAvroSchema()),
+          new Schema.Parser().parse(this.tableState.getRequiredAvroSchema()),
+          this.querySchema,
+          projection,
+          projectionBeforeMerge,
+          this.requiredPos,
+          this.emitDelete,
+          this.tableState.getOperationPos(),
+          getFullSchemaReader(split.getBasePath().get()));
+    } else {
+      throw new HoodieException("Unable to select an Iterator to read the Hoodie MOR File Split for "
+          + "file path: " + split.getBasePath()
+          + "log paths: " + split.getLogPaths()
+          + "hoodie table path: " + split.getTablePath()
+          + "spark partition Index: " + split.getSplitNumber()
+          + "merge type: " + split.getMergeType());
     }
     mayShiftInputSplit(split);
-  }
-
-  enum IteratorType {
-    BASE_FILE_ONLY_FILTERING,
-    BASE_FILE_ONLY,
-    LOG_FILE_ONLY_UNMERGED,
-    LOG_FILE_ONLY,
-    BASE_LOG_FILE_SKIP_MERGE,
-    BASE_LOG_FILE_MERGE;
-
-    static IteratorType getIteratorType(MergeOnReadInputSplit split, Configuration conf) {
-      if (!(split.getLogPaths().isPresent() && split.getLogPaths().get().size() > 0)) {
-        if (split.getInstantRange().isPresent()) {
-          return BASE_FILE_ONLY_FILTERING;
-        } else {
-          return BASE_FILE_ONLY;
-        }
-      } else if (!split.getBasePath().isPresent()) {
-        if (OptionsResolver.emitChangelog(conf)) {
-          return LOG_FILE_ONLY_UNMERGED;
-        } else {
-          return LOG_FILE_ONLY;
-        }
-      } else if (split.getMergeType().equals(FlinkOptions.REALTIME_SKIP_MERGE)) {
-        return BASE_LOG_FILE_SKIP_MERGE;
-      } else if (split.getMergeType().equals(FlinkOptions.REALTIME_PAYLOAD_COMBINE)) {
-        return BASE_LOG_FILE_MERGE;
-      } else {
-        throw new HoodieException("Unable to select an Iterator to read the Hoodie MOR File Split for "
-            + "file path: " + split.getBasePath()
-            + "log paths: " + split.getLogPaths()
-            + "hoodie table path: " + split.getTablePath()
-            + "spark partition Index: " + split.getSplitNumber()
-            + "merge type: " + split.getMergeType());
-      }
-    }
   }
 
   @Override

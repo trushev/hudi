@@ -141,6 +141,7 @@ public abstract class AbstractHoodieLogRecordReader {
                                           boolean reverseReader, int bufferSize, Option<InstantRange> instantRange,
                                           boolean withOperationField, boolean forceFullScan,
                                           Option<String> partitionName) {
+    ValidationUtils.checkArgument(!readerSchema.isEmptySchema(), "readerSchema can not be empty");
     this.readerSchema = readerSchema;
     this.latestInstantTime = latestInstantTime;
     this.hoodieTableMetaClient = HoodieTableMetaClient.builder().setConf(fs.getConf()).setBasePath(basePath).build();
@@ -387,10 +388,11 @@ public abstract class AbstractHoodieLogRecordReader {
    */
   private Option<Schema> getMergedSchema(HoodieDataBlock dataBlock) {
     Option<Schema> result = Option.empty();
-    if (readerSchema.isEvolutionEnabled() && !readerSchema.isEmptySchema()) {
+    if (readerSchema.isEvolutionEnabled()) {
       Long currentInstantTime = Long.parseLong(dataBlock.getLogBlockHeader().get(INSTANT_TIME));
       InternalSchema fileSchema = InternalSchemaCache
           .searchSchemaAndCache(currentInstantTime, hoodieTableMetaClient, false);
+      ValidationUtils.checkState(!fileSchema.isEmptySchema(), "fileSchema can not be empty");
       InternalSchema internalSchema = new InternalSchemaMerger(fileSchema, readerSchema, true, false).mergeSchema();
       Schema mergeSchema = AvroInternalSchemaConverter.convert(internalSchema, readerSchema.getAvroSchema().getName());
       result = Option.of(mergeSchema);
@@ -540,7 +542,6 @@ public abstract class AbstractHoodieLogRecordReader {
 
     public abstract Builder withLogFilePaths(List<String> logFilePaths);
 
-    // TODO: deprecate, use InternalSchema
     public abstract Builder withReaderSchema(Schema schema);
 
     public abstract Builder withReaderSchema(InternalSchema schema);

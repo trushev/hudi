@@ -204,13 +204,9 @@ public class HoodieLogFileReader implements HoodieLogFormat.Reader {
 
     switch (Objects.requireNonNull(blockType)) {
       case AVRO_DATA_BLOCK:
-        Schema blockSchema;
-        if ((readerSchema.isEvolutionEnabled() && !readerSchema.isEmptySchema()) || (!readerSchema.isEvolutionEnabled() && readerSchema.isEmptySchema())) {
-          // use writerSchema
-          blockSchema = null;
-        } else {
-          blockSchema = readerSchema.getAvroSchema();
-        }
+        Schema blockSchema = readerSchema.isEvolutionEnabled()
+            ? null // use writerSchema
+            : readerSchema.getAvroSchema();
         if (nextBlockVersion.getVersion() == HoodieLogFormatVersion.DEFAULT_VERSION) {
           return HoodieAvroDataBlock.getBlock(content.get(), blockSchema);
         } else {
