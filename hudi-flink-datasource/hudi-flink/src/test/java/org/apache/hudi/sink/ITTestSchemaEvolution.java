@@ -61,6 +61,7 @@ import static org.apache.hudi.utils.TestConfigurations.ROW_TYPE;
 import static org.apache.hudi.utils.TestConfigurations.ROW_TYPE_EVOLUTION;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
+@SuppressWarnings({"SqlDialectInspection", "SqlNoDataSourceInspection"})
 public class ITTestSchemaEvolution extends AbstractTestBase {
 
   static final String[] EXPECTED_MERGED_RESULT = new String[] {
@@ -153,7 +154,6 @@ public class ITTestSchemaEvolution extends AbstractTestBase {
     testSchemaEvolution(tableOptions, true, EXPECTED_UNMERGED_RESULT);
   }
 
-  @SuppressWarnings({"SqlDialectInspection", "SqlNoDataSourceInspection"})
   @Test
   public void testCompaction() throws Exception {
     TableOptions tableOptions = defaultTableOptions(tempFile.getAbsolutePath())
