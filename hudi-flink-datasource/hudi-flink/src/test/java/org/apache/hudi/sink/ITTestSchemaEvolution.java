@@ -165,8 +165,7 @@ public class ITTestSchemaEvolution extends AbstractTestBase {
       writeClient.compact(compactionInstant.get());
     }
     //language=SQL
-    TableResult tableResult = tEnv.executeSql("select first_name, salary, age from t1");
-    checkAnswer(tableResult, EXPECTED_MERGED_RESULT);
+    checkAnswer(tEnv.executeSql("select first_name, salary, age from t1"), EXPECTED_MERGED_RESULT);
   }
 
   private void testSchemaEvolution(TableOptions tableOptions) throws Exception {
@@ -185,6 +184,7 @@ public class ITTestSchemaEvolution extends AbstractTestBase {
     writeTableWithSchema1(tableOptions);
     changeTableSchema(tableOptions, shouldCompact);
     writeTableWithSchema2(tableOptions);
+    //language=SQL
     checkAnswer(tEnv.executeSql("select first_name, salary, age from t1"), expectedResult);
   }
 

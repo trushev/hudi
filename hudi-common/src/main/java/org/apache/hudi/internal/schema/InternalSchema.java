@@ -38,14 +38,12 @@ public class InternalSchema implements Serializable {
 
   public static final long DEFAULT_VERSION_ID = 0;
 
-  private static final InternalSchema EMPTY_SCHEMA = new InternalSchema(Collections.emptyList());
+  private static final InternalSchema EMPTY_SCHEMA = new InternalSchema(-1, Collections.emptyList());
 
   private final RecordType record;
   private transient Schema avroSchema;
   private final int maxColumnId;
   private long versionId;
-
-  private final boolean evolutionEnabled;
 
   public static InternalSchema getEmptyInternalSchema() {
     return EMPTY_SCHEMA;
@@ -79,16 +77,11 @@ public class InternalSchema implements Serializable {
     this.record = record;
     this.avroSchema = schema;
     this.maxColumnId = maxColumnId;
-    this.versionId = versionId;
-    this.evolutionEnabled = evolutionEnabled;
+    this.versionId = evolutionEnabled ? versionId : -1;
   }
 
   public boolean isEmptySchema() {
-    return record.fields().isEmpty();
-  }
-
-  public boolean isEvolutionEnabled() {
-    return evolutionEnabled;
+    return versionId == -1;
   }
 
   public RecordType getRecord() {

@@ -141,7 +141,6 @@ public abstract class AbstractHoodieLogRecordReader {
                                           boolean reverseReader, int bufferSize, Option<InstantRange> instantRange,
                                           boolean withOperationField, boolean forceFullScan,
                                           Option<String> partitionName) {
-    ValidationUtils.checkArgument(!readerSchema.isEmptySchema(), "readerSchema can not be empty");
     this.readerSchema = readerSchema;
     this.latestInstantTime = latestInstantTime;
     this.hoodieTableMetaClient = HoodieTableMetaClient.builder().setConf(fs.getConf()).setBasePath(basePath).build();
@@ -388,7 +387,7 @@ public abstract class AbstractHoodieLogRecordReader {
    */
   private Option<Schema> getMergedSchema(HoodieDataBlock dataBlock) {
     Option<Schema> result = Option.empty();
-    if (readerSchema.isEvolutionEnabled()) {
+    if (!readerSchema.isEmptySchema()) {
       Long currentInstantTime = Long.parseLong(dataBlock.getLogBlockHeader().get(INSTANT_TIME));
       InternalSchema fileSchema = InternalSchemaCache
           .searchSchemaAndCache(currentInstantTime, hoodieTableMetaClient, false);
