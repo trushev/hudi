@@ -478,7 +478,7 @@ public class Types {
       this.idToField = Collections.unmodifiableMap(InternalSchemaBuilder.buildIdToField(fields));
       this.nameToId = Collections.unmodifiableMap(InternalSchemaBuilder.buildNameToId(this));
       this.idToName = Collections.unmodifiableMap(nameToId.entrySet().stream()
-          .collect(Collectors.toMap(Map.Entry::getValue, Map.Entry::getKey)));
+          .collect(Collectors.toMap(Map.Entry::getValue, Map.Entry::getKey, (id1, id2) -> id2)));
     }
 
     public Set<Integer> ids() {
