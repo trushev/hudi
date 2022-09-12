@@ -19,7 +19,6 @@
 package org.apache.hudi.table.format;
 
 import org.apache.hudi.common.fs.FSUtils;
-import org.apache.hudi.common.model.HoodieRecord;
 import org.apache.hudi.common.table.HoodieTableMetaClient;
 import org.apache.hudi.common.table.TableSchemaResolver;
 import org.apache.hudi.common.util.InternalSchemaCache;
@@ -67,8 +66,7 @@ public final class SchemaEvolutionContext implements Serializable {
 
   public SchemaEvolutionContext(HoodieTableMetaClient metaClient, InternalSchema querySchema) {
     this.metaClient = metaClient;
-    this.querySchema = new InternalSchema(querySchema.columns().stream()
-        .filter(f -> !f.name().equals(HoodieRecord.OPERATION_METADATA_FIELD)).collect(Collectors.toList()));
+    this.querySchema = querySchema;
   }
 
   public InternalSchema getQuerySchema() {
