@@ -187,8 +187,9 @@ public class MergeOnReadInputFormat
       actualFieldNames = context.getFieldNames(actualSchema);
       actualFieldTypes = context.getFieldTypes(actualSchema);
     } else {
-      querySchema = InternalSchema.getEmptyInternalSchema();
-      actualSchema = InternalSchema.getEmptyInternalSchema();
+      InternalSchema tableSchema = new InternalSchema(new Schema.Parser().parse(tableState.getAvroSchema()));
+      querySchema = tableSchema;
+      actualSchema = tableSchema;
       actualFieldNames = fieldNames;
       actualFieldTypes = fieldTypes;
     }
