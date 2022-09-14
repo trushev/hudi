@@ -36,14 +36,20 @@ import java.util.stream.Collectors;
  */
 public class InternalSchema implements Serializable {
 
-  public static final long DEFAULT_VERSION_ID = 0;
-
-  private static final InternalSchema EMPTY_SCHEMA = new InternalSchema(-1, Collections.emptyList());
+  private static final String RECORD_NAME = "record";
+  private static final int DEFAULT_MAX_COLUMN_ID = -1;
+  private static final long DEFAULT_VERSION_ID = 0L;
+  private static final long EMPTY_SCHEMA_VERSION_ID = -1L;
+  private static final InternalSchema EMPTY_SCHEMA = new InternalSchema(EMPTY_SCHEMA_VERSION_ID, Collections.emptyList());
 
   private final RecordType record;
   private transient Schema avroSchema;
   private final int maxColumnId;
   private long versionId;
+
+  public static long getDefaultVersionId() {
+    return DEFAULT_VERSION_ID;
+  }
 
   public static InternalSchema getEmptyInternalSchema() {
     return EMPTY_SCHEMA;
@@ -54,7 +60,7 @@ public class InternalSchema implements Serializable {
   }
 
   public InternalSchema(long versionId, List<Field> cols) {
-    this(RecordType.get(cols), -1, versionId);
+    this(RecordType.get(cols), DEFAULT_MAX_COLUMN_ID, versionId);
   }
 
   public InternalSchema(long versionId, int maxColumnId, List<Field> cols) {
@@ -62,13 +68,13 @@ public class InternalSchema implements Serializable {
   }
 
   public InternalSchema(Schema avroSchema) {
-    this((RecordType) AvroInternalSchemaConverter.convertToField(avroSchema), avroSchema, -1, DEFAULT_VERSION_ID, false);
+    this((RecordType) AvroInternalSchemaConverter.convertToField(avroSchema), avroSchema, DEFAULT_MAX_COLUMN_ID, DEFAULT_VERSION_ID, false);
   }
 
   private InternalSchema(RecordType record, int maxColumnId, long versionId) {
     this(record,
-        AvroInternalSchemaConverter.convert(record, "record"),
-        maxColumnId != -1 ? maxColumnId : record.ids().stream().mapToInt(i -> i).max().orElse(-1),
+        AvroInternalSchemaConverter.convert(record, RECORD_NAME),
+        maxColumnId == DEFAULT_MAX_COLUMN_ID ? record.ids().stream().mapToInt(i -> i).max().orElse(DEFAULT_MAX_COLUMN_ID) : maxColumnId,
         versionId,
         true);
   }
@@ -77,11 +83,11 @@ public class InternalSchema implements Serializable {
     this.record = record;
     this.avroSchema = schema;
     this.maxColumnId = maxColumnId;
-    this.versionId = evolutionEnabled ? versionId : -1;
+    this.versionId = evolutionEnabled ? versionId : EMPTY_SCHEMA_VERSION_ID;
   }
 
   public boolean isEmptySchema() {
-    return versionId == -1;
+    return versionId == EMPTY_SCHEMA_VERSION_ID;
   }
 
   public RecordType getRecord() {
@@ -90,7 +96,7 @@ public class InternalSchema implements Serializable {
 
   public Schema getAvroSchema() {
     if (avroSchema == null) {
-      avroSchema = AvroInternalSchemaConverter.convert(record, "record");
+      avroSchema = AvroInternalSchemaConverter.convert(record, RECORD_NAME);
     }
     return avroSchema;
   }

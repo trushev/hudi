@@ -175,7 +175,7 @@ public class SchemaChangeUtils {
   public static InternalSchema applyTableChanges2Schema(InternalSchema internalSchema, TableChanges.ColumnDeleteChange deletes) {
     Types.RecordType newType = (Types.RecordType)applyTableChange2Type(internalSchema.getRecord(), deletes);
     // delete action should not change the getMaxColumnId field.
-    return new InternalSchema(InternalSchema.DEFAULT_VERSION_ID, internalSchema.getMaxColumnId(), newType.fields());
+    return new InternalSchema(InternalSchema.getDefaultVersionId(), internalSchema.getMaxColumnId(), newType.fields());
   }
 
   /**

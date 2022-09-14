@@ -83,7 +83,7 @@ public class AvroInternalSchemaConverter {
 
   /** Convert an avro schema into internalSchema. */
   public static InternalSchema convert(Schema schema) {
-    return convert(InternalSchema.DEFAULT_VERSION_ID, schema);
+    return convert(InternalSchema.getDefaultVersionId(), schema);
   }
 
   /** Convert an avro schema into internalSchema with specified versionId. */
