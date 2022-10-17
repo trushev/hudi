@@ -37,6 +37,8 @@ import org.apache.hudi.config.HoodieWriteConfig;
 import org.apache.hudi.configuration.FlinkOptions;
 import org.apache.hudi.configuration.HadoopConfigurations;
 import org.apache.hudi.exception.HoodieException;
+import org.apache.hudi.internal.schema.InternalSchema;
+import org.apache.hudi.internal.schema.convert.AvroInternalSchemaConverter;
 import org.apache.hudi.sink.bootstrap.aggregate.BootstrapAggFunction;
 import org.apache.hudi.sink.meta.CkpMetadata;
 import org.apache.hudi.table.HoodieTable;
@@ -44,7 +46,6 @@ import org.apache.hudi.table.format.FormatUtils;
 import org.apache.hudi.util.FlinkTables;
 import org.apache.hudi.util.StreamerUtil;
 
-import org.apache.avro.Schema;
 import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.api.common.state.ListState;
 import org.apache.flink.api.common.state.ListStateDescriptor;
@@ -197,7 +198,9 @@ public class BootstrapOperator<I, O extends HoodieRecord<?>>
 
     if (latestCommitTime.isPresent()) {
       BaseFileUtils fileUtils = BaseFileUtils.getInstance(this.hoodieTable.getBaseFileFormat());
-      Schema schema = new TableSchemaResolver(this.hoodieTable.getMetaClient()).getTableAvroSchema();
+      TableSchemaResolver schemaResolver = new TableSchemaResolver(this.hoodieTable.getMetaClient());
+      InternalSchema schema = schemaResolver.getTableInternalSchemaFromCommitMetadata().orElse(
+          AvroInternalSchemaConverter.convertToEmpty(schemaResolver.getTableAvroSchema()));
 
       List<FileSlice> fileSlices = this.hoodieTable.getSliceView()
           .getLatestMergedFileSlicesBeforeOrOn(partitionPath, latestCommitTime.get().getTimestamp())

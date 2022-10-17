@@ -88,7 +88,7 @@ public abstract class AbstractHoodieLogRecordReader {
   private static final Logger LOG = LogManager.getLogger(AbstractHoodieLogRecordReader.class);
 
   // Reader schema for the records
-  protected final Schema readerSchema;
+  protected final InternalSchema readerSchema;
   // Latest valid instant time
   // Log-Blocks belonging to inflight delta-instants are filtered-out using this high-watermark.
   private final String latestInstantTime;
@@ -117,8 +117,6 @@ public abstract class AbstractHoodieLogRecordReader {
   private final FileSystem fs;
   // Total log files read - for metrics
   private AtomicLong totalLogFiles = new AtomicLong(0);
-  // Internal schema, used to support full schema evolution.
-  private InternalSchema internalSchema;
   // Hoodie table path.
   private final String path;
   // Total log blocks read - for metrics
@@ -142,19 +140,10 @@ public abstract class AbstractHoodieLogRecordReader {
   private boolean populateMetaFields = true;
 
   protected AbstractHoodieLogRecordReader(FileSystem fs, String basePath, List<String> logFilePaths,
-                                          Schema readerSchema,
-                                          String latestInstantTime, boolean readBlocksLazily, boolean reverseReader,
-                                          int bufferSize, Option<InstantRange> instantRange,
-                                          boolean withOperationField) {
-    this(fs, basePath, logFilePaths, readerSchema, latestInstantTime, readBlocksLazily, reverseReader, bufferSize,
-        instantRange, withOperationField, true, Option.empty(), InternalSchema.getEmptyInternalSchema());
-  }
-
-  protected AbstractHoodieLogRecordReader(FileSystem fs, String basePath, List<String> logFilePaths,
-                                          Schema readerSchema, String latestInstantTime, boolean readBlocksLazily,
+                                          InternalSchema readerSchema, String latestInstantTime, boolean readBlocksLazily,
                                           boolean reverseReader, int bufferSize, Option<InstantRange> instantRange,
                                           boolean withOperationField, boolean forceFullScan,
-                                          Option<String> partitionName, InternalSchema internalSchema) {
+                                          Option<String> partitionName) {
     this.readerSchema = readerSchema;
     this.latestInstantTime = latestInstantTime;
     this.hoodieTableMetaClient = HoodieTableMetaClient.builder().setConf(fs.getConf()).setBasePath(basePath).build();
@@ -174,7 +163,6 @@ public abstract class AbstractHoodieLogRecordReader {
     this.instantRange = instantRange;
     this.withOperationField = withOperationField;
     this.forceFullScan = forceFullScan;
-    this.internalSchema = internalSchema == null ? InternalSchema.getEmptyInternalSchema() : internalSchema;
     this.path = basePath;
 
     // Key fields when populate meta fields is disabled (that is, virtual keys enabled)
@@ -223,7 +211,7 @@ public abstract class AbstractHoodieLogRecordReader {
       boolean enableRecordLookups = !forceFullScan;
       logFormatReaderWrapper = new HoodieLogFormatReader(fs,
           logFilePaths.stream().map(logFile -> new HoodieLogFile(new Path(logFile))).collect(Collectors.toList()),
-          readerSchema, readBlocksLazily, reverseReader, bufferSize, enableRecordLookups, keyField, internalSchema);
+          readerSchema, readBlocksLazily, reverseReader, bufferSize, enableRecordLookups, keyField);
 
       Set<HoodieLogFile> scannedLogFiles = new HashSet<>();
       while (logFormatReaderWrapper.hasNext()) {
@@ -405,12 +393,12 @@ public abstract class AbstractHoodieLogRecordReader {
    */
   private Option<Schema> getMergedSchema(HoodieDataBlock dataBlock) {
     Option<Schema> result = Option.empty();
-    if (!internalSchema.isEmptySchema()) {
+    if (!readerSchema.isEmptySchema()) {
       Long currentInstantTime = Long.parseLong(dataBlock.getLogBlockHeader().get(INSTANT_TIME));
       InternalSchema fileSchema = InternalSchemaCache
           .searchSchemaAndCache(currentInstantTime, hoodieTableMetaClient, false);
-      Schema mergeSchema = AvroInternalSchemaConverter
-          .convert(new InternalSchemaMerger(fileSchema, internalSchema, true, false).mergeSchema(), readerSchema.getName());
+      InternalSchema internalSchema = new InternalSchemaMerger(fileSchema, readerSchema, true, false).mergeSchema();
+      Schema mergeSchema = AvroInternalSchemaConverter.convert(internalSchema, readerSchema.getAvroSchema().getName());
       result = Option.of(mergeSchema);
     }
     return result;
@@ -563,6 +551,8 @@ public abstract class AbstractHoodieLogRecordReader {
     public abstract Builder withLogFilePaths(List<String> logFilePaths);
 
     public abstract Builder withReaderSchema(Schema schema);
+
+    public abstract Builder withReaderSchema(InternalSchema internalSchema);
 
     public abstract Builder withLatestInstantTime(String latestInstantTime);
 

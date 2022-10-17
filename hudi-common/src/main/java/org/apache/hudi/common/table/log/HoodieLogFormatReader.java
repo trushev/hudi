@@ -42,8 +42,7 @@ public class HoodieLogFormatReader implements HoodieLogFormat.Reader {
   private final List<HoodieLogFileReader> prevReadersInOpenState;
   private HoodieLogFileReader currentReader;
   private final FileSystem fs;
-  private final Schema readerSchema;
-  private InternalSchema internalSchema = InternalSchema.getEmptyInternalSchema();
+  private final InternalSchema readerSchema;
   private final boolean readBlocksLazily;
   private final boolean reverseLogReader;
   private final String recordKeyField;
@@ -52,9 +51,9 @@ public class HoodieLogFormatReader implements HoodieLogFormat.Reader {
 
   private static final Logger LOG = LogManager.getLogger(HoodieLogFormatReader.class);
 
-  HoodieLogFormatReader(FileSystem fs, List<HoodieLogFile> logFiles, Schema readerSchema, boolean readBlocksLazily,
+  HoodieLogFormatReader(FileSystem fs, List<HoodieLogFile> logFiles, InternalSchema readerSchema, boolean readBlocksLazily,
                         boolean reverseLogReader, int bufferSize, boolean enableRecordLookups,
-                        String recordKeyField, InternalSchema internalSchema) throws IOException {
+                        String recordKeyField) throws IOException {
     this.logFiles = logFiles;
     this.fs = fs;
     this.readerSchema = readerSchema;
@@ -64,11 +63,10 @@ public class HoodieLogFormatReader implements HoodieLogFormat.Reader {
     this.prevReadersInOpenState = new ArrayList<>();
     this.recordKeyField = recordKeyField;
     this.enableInlineReading = enableRecordLookups;
-    this.internalSchema = internalSchema == null ? InternalSchema.getEmptyInternalSchema() : internalSchema;
     if (logFiles.size() > 0) {
       HoodieLogFile nextLogFile = logFiles.remove(0);
-      this.currentReader = new HoodieLogFileReader(fs, nextLogFile, readerSchema, bufferSize, readBlocksLazily, false,
-          enableRecordLookups, recordKeyField, internalSchema);
+      this.currentReader = new HoodieLogFileReader(fs, nextLogFile, getReaderSchema(), bufferSize, readBlocksLazily, false,
+          enableRecordLookups, recordKeyField);
     }
   }
 
@@ -107,8 +105,8 @@ public class HoodieLogFormatReader implements HoodieLogFormat.Reader {
         } else {
           this.prevReadersInOpenState.add(currentReader);
         }
-        this.currentReader = new HoodieLogFileReader(fs, nextLogFile, readerSchema, bufferSize, readBlocksLazily, false,
-            enableInlineReading, recordKeyField, internalSchema);
+        this.currentReader = new HoodieLogFileReader(fs, nextLogFile, getReaderSchema(), bufferSize, readBlocksLazily, false,
+            enableInlineReading, recordKeyField);
       } catch (IOException io) {
         throw new HoodieIOException("unable to initialize read with log file ", io);
       }
@@ -141,4 +139,9 @@ public class HoodieLogFormatReader implements HoodieLogFormat.Reader {
     return this.currentReader.prev();
   }
 
+  private Schema getReaderSchema() {
+    return readerSchema.isEmptySchema()
+        ? readerSchema.getAvroSchema()
+        : null; // use writerSchema
+  }
 }

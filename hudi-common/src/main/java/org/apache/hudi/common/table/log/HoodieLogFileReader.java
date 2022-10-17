@@ -77,7 +77,6 @@ public class HoodieLogFileReader implements HoodieLogFormat.Reader {
   private final HoodieLogFile logFile;
   private final byte[] magicBuffer = new byte[6];
   private final Schema readerSchema;
-  private InternalSchema internalSchema;
   private final String keyField;
   private boolean readBlockLazily;
   private long reverseLogFilePosition;
@@ -101,12 +100,6 @@ public class HoodieLogFileReader implements HoodieLogFormat.Reader {
   public HoodieLogFileReader(FileSystem fs, HoodieLogFile logFile, Schema readerSchema, int bufferSize,
                              boolean readBlockLazily, boolean reverseReader, boolean enableRecordLookups,
                              String keyField) throws IOException {
-    this(fs, logFile, readerSchema, bufferSize, readBlockLazily, reverseReader, enableRecordLookups, keyField, InternalSchema.getEmptyInternalSchema());
-  }
-
-  public HoodieLogFileReader(FileSystem fs, HoodieLogFile logFile, Schema readerSchema, int bufferSize,
-                             boolean readBlockLazily, boolean reverseReader, boolean enableRecordLookups,
-                             String keyField, InternalSchema internalSchema) throws IOException {
     this.hadoopConf = fs.getConf();
     // NOTE: We repackage {@code HoodieLogFile} here to make sure that the provided path
     //       is prefixed with an appropriate scheme given that we're not propagating the FS
@@ -118,7 +111,6 @@ public class HoodieLogFileReader implements HoodieLogFormat.Reader {
     this.reverseReader = reverseReader;
     this.enableRecordLookups = enableRecordLookups;
     this.keyField = keyField;
-    this.internalSchema = internalSchema == null ? InternalSchema.getEmptyInternalSchema() : internalSchema;
     if (this.reverseReader) {
       this.reverseLogFilePosition = this.lastReverseLogFilePosition = this.logFile.getFileSize();
     }
@@ -209,10 +201,10 @@ public class HoodieLogFileReader implements HoodieLogFormat.Reader {
     switch (Objects.requireNonNull(blockType)) {
       case AVRO_DATA_BLOCK:
         if (nextBlockVersion.getVersion() == HoodieLogFormatVersion.DEFAULT_VERSION) {
-          return HoodieAvroDataBlock.getBlock(content.get(), readerSchema, internalSchema);
+          return HoodieAvroDataBlock.getBlock(content.get(), readerSchema);
         } else {
           return new HoodieAvroDataBlock(inputStream, content, readBlockLazily, logBlockContentLoc,
-              Option.ofNullable(readerSchema), header, footer, keyField, internalSchema);
+              Option.ofNullable(readerSchema), header, footer, keyField);
         }
 
       case HFILE_DATA_BLOCK:

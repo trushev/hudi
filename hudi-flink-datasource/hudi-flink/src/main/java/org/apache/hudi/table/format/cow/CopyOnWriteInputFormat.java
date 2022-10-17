@@ -19,7 +19,12 @@
 package org.apache.hudi.table.format.cow;
 
 import java.util.Comparator;
+
 import org.apache.hudi.common.fs.FSUtils;
+import org.apache.hudi.common.util.Option;
+import org.apache.hudi.internal.schema.InternalSchema;
+import org.apache.hudi.table.format.CastMap;
+import org.apache.hudi.table.format.FlinkInternalSchemaManager;
 import org.apache.hudi.table.format.cow.vector.reader.ParquetColumnarRowSplitReader;
 import org.apache.hudi.util.DataTypeUtils;
 
@@ -31,12 +36,15 @@ import org.apache.flink.core.fs.FileInputSplit;
 import org.apache.flink.core.fs.Path;
 import org.apache.flink.formats.parquet.utils.SerializableConfiguration;
 import org.apache.flink.table.data.RowData;
+import org.apache.flink.table.data.columnar.ColumnarRowData;
 import org.apache.flink.table.types.DataType;
 import org.apache.flink.table.utils.PartitionPathUtils;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.BlockLocation;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
+import org.apache.hudi.util.RowDataCastProjection;
+import org.apache.hudi.util.RowDataProjection;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -47,6 +55,9 @@ import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Set;
+import java.util.stream.IntStream;
+
+import static org.apache.hudi.common.model.HoodieRecord.HOODIE_META_COLUMNS;
 
 /**
  * An implementation of {@link FileInputFormat} to read {@link RowData} records
@@ -66,8 +77,8 @@ public class CopyOnWriteInputFormat extends FileInputFormat<RowData> {
 
   private static final Logger LOG = LoggerFactory.getLogger(CopyOnWriteInputFormat.class);
 
-  private final String[] fullFieldNames;
-  private final DataType[] fullFieldTypes;
+  private String[] fullFieldNames;
+  private DataType[] fullFieldTypes;
   private final int[] selectedFields;
   private final String partDefaultName;
   private final boolean utcTimestamp;
@@ -82,6 +93,9 @@ public class CopyOnWriteInputFormat extends FileInputFormat<RowData> {
    */
   private FilePathFilter localFilesFilter = new GlobFilePathFilter();
 
+  private final Option<FlinkInternalSchemaManager> schemaManager;
+  private Option<RowDataProjection> projection;
+
   public CopyOnWriteInputFormat(
       Path[] paths,
       String[] fullFieldNames,
@@ -90,6 +104,7 @@ public class CopyOnWriteInputFormat extends FileInputFormat<RowData> {
       String partDefaultName,
       long limit,
       Configuration conf,
+      Option<FlinkInternalSchemaManager> schemaManager,
       boolean utcTimestamp) {
     super.setFilePaths(paths);
     this.limit = limit;
@@ -98,6 +113,7 @@ public class CopyOnWriteInputFormat extends FileInputFormat<RowData> {
     this.fullFieldTypes = fullFieldTypes;
     this.selectedFields = selectedFields;
     this.conf = new SerializableConfiguration(conf);
+    this.schemaManager = schemaManager;
     this.utcTimestamp = utcTimestamp;
   }
 
@@ -123,6 +139,10 @@ public class CopyOnWriteInputFormat extends FileInputFormat<RowData> {
       }
     });
 
+    if (schemaManager.isPresent()) {
+      setActualFields(fileSplit);
+    }
+
     this.reader = ParquetSplitReaderUtil.genPartColumnarRowReader(
         utcTimestamp,
         true,
@@ -136,6 +156,25 @@ public class CopyOnWriteInputFormat extends FileInputFormat<RowData> {
         fileSplit.getStart(),
         fileSplit.getLength());
     this.currentReadCount = 0L;
+  }
+
+  private void setActualFields(FileInputSplit fileSplit) {
+    FlinkInternalSchemaManager context = schemaManager.get();
+    InternalSchema actualSchema = context.getActualSchema(fileSplit);
+    List<DataType> fieldTypes = context.getFieldTypes(actualSchema);
+    CastMap castMap = context.getCastMap(context.getQuerySchema(), actualSchema);
+    int[] selectedFields = Arrays.stream(this.selectedFields).map(pos -> pos + HOODIE_META_COLUMNS.size()).toArray();
+    if (castMap.containsAnyPos(selectedFields)) {
+      int[] requiredFields = IntStream.range(0, this.selectedFields.length).toArray();
+      projection = Option.of(new RowDataCastProjection(
+          FlinkInternalSchemaManager.project(fieldTypes, selectedFields),
+          requiredFields,
+          castMap.withNewPositions(selectedFields, requiredFields)));
+    } else {
+      projection = Option.empty();
+    }
+    fullFieldNames = context.getFieldNames(actualSchema).stream().skip(HOODIE_META_COLUMNS.size()).toArray(String[]::new);
+    fullFieldTypes = fieldTypes.stream().skip(HOODIE_META_COLUMNS.size()).toArray(DataType[]::new);
   }
 
   @Override
@@ -281,7 +320,12 @@ public class CopyOnWriteInputFormat extends FileInputFormat<RowData> {
   @Override
   public RowData nextRecord(RowData reuse) {
     currentReadCount++;
-    return reader.nextRecord();
+    ColumnarRowData rowData = reader.nextRecord();
+    if (projection.isPresent()) {
+      return projection.get().project(rowData);
+    } else {
+      return rowData;
+    }
   }
 
   @Override

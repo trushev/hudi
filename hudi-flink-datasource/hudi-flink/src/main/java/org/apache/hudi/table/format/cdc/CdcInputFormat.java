@@ -33,6 +33,7 @@ import org.apache.hudi.config.HoodieWriteConfig;
 import org.apache.hudi.configuration.FlinkOptions;
 import org.apache.hudi.configuration.OptionsResolver;
 import org.apache.hudi.exception.HoodieException;
+import org.apache.hudi.internal.schema.convert.AvroInternalSchemaConverter;
 import org.apache.hudi.table.format.FormatUtils;
 import org.apache.hudi.table.format.cow.vector.reader.ParquetColumnarRowSplitReader;
 import org.apache.hudi.table.format.mor.MergeOnReadInputFormat;
@@ -123,6 +124,8 @@ public class CdcInputFormat extends MergeOnReadInputFormat {
           this.tableState.getRowType(),
           this.tableState.getRowType(),
           tableSchema,
+          AvroInternalSchemaConverter.convertToEmpty(tableSchema),
+          Option.empty(),
           Option.empty(),
           Option.empty(),
           false,

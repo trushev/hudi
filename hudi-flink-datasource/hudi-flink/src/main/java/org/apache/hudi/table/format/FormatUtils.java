@@ -34,6 +34,7 @@ import org.apache.hudi.config.HoodieWriteConfig;
 import org.apache.hudi.configuration.FlinkOptions;
 import org.apache.hudi.exception.HoodieIOException;
 import org.apache.hudi.hadoop.config.HoodieRealtimeConfig;
+import org.apache.hudi.internal.schema.InternalSchema;
 import org.apache.hudi.table.format.mor.MergeOnReadInputSplit;
 import org.apache.hudi.util.StreamerUtil;
 
@@ -140,7 +141,7 @@ public class FormatUtils {
 
   public static HoodieMergedLogRecordScanner logScanner(
       MergeOnReadInputSplit split,
-      Schema logSchema,
+      InternalSchema logSchema,
       org.apache.flink.configuration.Configuration flinkConf,
       Configuration hadoopConf) {
     HoodieWriteConfig writeConfig = StreamerUtil.getHoodieClientConfig(flinkConf);
@@ -165,7 +166,7 @@ public class FormatUtils {
 
   private static HoodieUnMergedLogRecordScanner unMergedLogScanner(
       MergeOnReadInputSplit split,
-      Schema logSchema,
+      InternalSchema logSchema,
       org.apache.flink.configuration.Configuration flinkConf,
       Configuration hadoopConf,
       HoodieUnMergedLogRecordScanner.LogRecordScannerCallback callback) {
@@ -204,7 +205,7 @@ public class FormatUtils {
 
     public BoundedMemoryRecords(
         MergeOnReadInputSplit split,
-        Schema logSchema,
+        InternalSchema logSchema,
         Configuration hadoopConf,
         org.apache.flink.configuration.Configuration flinkConf) {
       this.executor = new BoundedInMemoryExecutor<>(
@@ -245,7 +246,7 @@ public class FormatUtils {
 
   public static HoodieMergedLogRecordScanner logScanner(
       List<String> logPaths,
-      Schema logSchema,
+      InternalSchema logSchema,
       String latestInstantTime,
       HoodieWriteConfig writeConfig,
       Configuration hadoopConf) {

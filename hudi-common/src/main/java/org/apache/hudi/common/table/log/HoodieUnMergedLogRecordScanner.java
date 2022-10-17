@@ -26,6 +26,8 @@ import org.apache.hudi.common.util.Option;
 
 import org.apache.avro.Schema;
 import org.apache.hadoop.fs.FileSystem;
+import org.apache.hudi.internal.schema.InternalSchema;
+import org.apache.hudi.internal.schema.convert.AvroInternalSchemaConverter;
 
 import java.util.List;
 import java.util.stream.Collectors;
@@ -37,10 +39,10 @@ public class HoodieUnMergedLogRecordScanner extends AbstractHoodieLogRecordReade
 
   private final LogRecordScannerCallback callback;
 
-  private HoodieUnMergedLogRecordScanner(FileSystem fs, String basePath, List<String> logFilePaths, Schema readerSchema,
+  private HoodieUnMergedLogRecordScanner(FileSystem fs, String basePath, List<String> logFilePaths, InternalSchema readerSchema,
                                          String latestInstantTime, boolean readBlocksLazily, boolean reverseReader, int bufferSize,
                                          LogRecordScannerCallback callback, Option<InstantRange> instantRange) {
-    super(fs, basePath, logFilePaths, readerSchema, latestInstantTime, readBlocksLazily, reverseReader, bufferSize, instantRange, false);
+    super(fs, basePath, logFilePaths, readerSchema, latestInstantTime, readBlocksLazily, reverseReader, bufferSize, instantRange, false, true, Option.empty());
     this.callback = callback;
   }
 
@@ -78,7 +80,7 @@ public class HoodieUnMergedLogRecordScanner extends AbstractHoodieLogRecordReade
     private FileSystem fs;
     private String basePath;
     private List<String> logFilePaths;
-    private Schema readerSchema;
+    private InternalSchema readerSchema;
     private String latestInstantTime;
     private boolean readBlocksLazily;
     private boolean reverseReader;
@@ -105,6 +107,11 @@ public class HoodieUnMergedLogRecordScanner extends AbstractHoodieLogRecordReade
     }
 
     public Builder withReaderSchema(Schema schema) {
+      this.readerSchema = AvroInternalSchemaConverter.convertToEmpty(schema);
+      return this;
+    }
+
+    public Builder withReaderSchema(InternalSchema schema) {
       this.readerSchema = schema;
       return this;
     }

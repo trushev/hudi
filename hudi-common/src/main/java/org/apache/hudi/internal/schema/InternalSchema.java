@@ -22,6 +22,9 @@ import org.apache.hudi.common.util.StringUtils;
 import org.apache.hudi.internal.schema.Types.Field;
 import org.apache.hudi.internal.schema.Types.RecordType;
 
+import org.apache.avro.Schema;
+import org.apache.hudi.internal.schema.convert.AvroInternalSchemaConverter;
+
 import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -39,9 +42,11 @@ import java.util.stream.Collectors;
  */
 public class InternalSchema implements Serializable {
 
+  public static final long EMPTY_SCHEMA_VERSION_ID = -1;
   private static final long DEFAULT_VERSION_ID = 0;
 
   private final RecordType record;
+  private transient Schema avroSchema;
 
   private int maxColumnId;
   private long versionId;
@@ -51,7 +56,7 @@ public class InternalSchema implements Serializable {
   private transient Map<Integer, String> idToName = null;
 
   public static InternalSchema getEmptyInternalSchema() {
-    return new InternalSchema(-1L, new ArrayList<>());
+    return new InternalSchema(EMPTY_SCHEMA_VERSION_ID, new ArrayList<>());
   }
 
   public boolean isEmptySchema() {
@@ -87,6 +92,13 @@ public class InternalSchema implements Serializable {
 
   public RecordType getRecord() {
     return record;
+  }
+
+  public Schema getAvroSchema() {
+    if (avroSchema == null) {
+      avroSchema = AvroInternalSchemaConverter.convert(record, "record");
+    }
+    return avroSchema;
   }
 
   private Map<Integer, String> buildIdToName() {
