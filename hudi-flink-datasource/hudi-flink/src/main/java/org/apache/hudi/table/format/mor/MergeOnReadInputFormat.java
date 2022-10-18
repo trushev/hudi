@@ -518,7 +518,6 @@ public class MergeOnReadInputFormat
     final Schema tableSchema = new Schema.Parser().parse(tableState.getAvroSchema());
     final AvroToRowDataConverters.AvroToRowDataConverter avroToRowDataConverter =
         AvroToRowDataConverters.createRowConverter(tableState.getRowType());
-    // TODO
     final HoodieMergedLogRecordScanner scanner = FormatUtils.logScanner(split, AvroInternalSchemaConverter.convertToEmpty(tableSchema), conf, hadoopConf);
     final Iterator<String> logRecordsKeyIterator = scanner.getRecords().keySet().iterator();
 

@@ -93,7 +93,7 @@ public class AvroInternalSchemaConverter {
 
   /** Convert an avro schema into internalSchema with given versionId. */
   public static InternalSchema convertToEmpty(Schema schema) {
-    return convert(schema).setSchemaId(InternalSchema.EMPTY_SCHEMA_VERSION_ID);
+    return new InternalSchema(InternalSchema.EMPTY_SCHEMA_VERSION_ID, schema);
   }
 
   /** Check whether current avro schema is optional?. */

@@ -140,8 +140,7 @@ public class HoodieLogFormatReader implements HoodieLogFormat.Reader {
   }
 
   private Schema getReaderSchema() {
-    return readerSchema.isEmptySchema()
-        ? readerSchema.getAvroSchema()
-        : null; // use writerSchema
+    boolean useWriterSchema = !readerSchema.isEmptySchema();
+    return useWriterSchema ? null : readerSchema.getAvroSchema();
   }
 }

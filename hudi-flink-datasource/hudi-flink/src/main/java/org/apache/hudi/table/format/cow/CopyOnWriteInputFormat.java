@@ -19,7 +19,6 @@
 package org.apache.hudi.table.format.cow;
 
 import java.util.Comparator;
-
 import org.apache.hudi.common.fs.FSUtils;
 import org.apache.hudi.common.util.Option;
 import org.apache.hudi.internal.schema.InternalSchema;

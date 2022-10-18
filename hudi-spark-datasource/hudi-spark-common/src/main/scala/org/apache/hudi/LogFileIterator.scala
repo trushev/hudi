@@ -34,20 +34,17 @@ import org.apache.hudi.hadoop.config.HoodieRealtimeConfig
 import org.apache.hudi.internal.schema.InternalSchema
 import org.apache.hudi.metadata.{HoodieBackedTableMetadata, HoodieTableMetadata}
 import org.apache.hudi.metadata.HoodieTableMetadata.getDataTableBasePathFromMetadataTable
-
 import org.apache.avro.Schema
 import org.apache.avro.generic.{GenericRecord, GenericRecordBuilder, IndexedRecord}
-
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.mapred.JobConf
-
+import org.apache.hudi.internal.schema.convert.AvroInternalSchemaConverter
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.types.StructType
 
 import java.io.Closeable
 import java.util.Properties
-
 import scala.annotation.tailrec
 import scala.collection.JavaConverters._
 import scala.util.Try
@@ -84,9 +81,9 @@ class LogFileIterator(split: HoodieMergeOnReadFileSplit,
 
   // TODO: now logScanner with internalSchema support column project, we may no need projectAvroUnsafe
   private var logScanner = {
-    val internalSchema = tableSchema.internalSchema.getOrElse(InternalSchema.getEmptyInternalSchema)
-    scanLog(split.logFiles, getPartitionPath(split), logFileReaderAvroSchema, tableState,
-      maxCompactionMemoryInBytes, config, internalSchema)
+    val internalSchema = tableSchema.internalSchema.getOrElse(AvroInternalSchemaConverter.convertToEmpty(logFileReaderAvroSchema))
+    scanLog(split.logFiles, getPartitionPath(split), internalSchema, tableState,
+      maxCompactionMemoryInBytes, config)
   }
 
   private val logRecords = logScanner.getRecords.asScala
@@ -243,11 +240,10 @@ object LogFileIterator {
 
   def scanLog(logFiles: List[HoodieLogFile],
               partitionPath: Path,
-              logSchema: Schema,
+              logSchema: InternalSchema,
               tableState: HoodieTableState,
               maxCompactionMemoryInBytes: Long,
-              hadoopConf: Configuration,
-              internalSchema: InternalSchema = InternalSchema.getEmptyInternalSchema): HoodieMergedLogRecordScanner = {
+              hadoopConf: Configuration): HoodieMergedLogRecordScanner = {
     val tablePath = tableState.tablePath
     val fs = FSUtils.getFs(tablePath, hadoopConf)
 
@@ -282,7 +278,6 @@ object LogFileIterator {
             HoodieRealtimeConfig.DEFAULT_COMPACTION_LAZY_BLOCK_READ_ENABLED).toBoolean)
             .getOrElse(false))
         .withReverseReader(false)
-        .withInternalSchema(internalSchema)
         .withBufferSize(
           hadoopConf.getInt(HoodieRealtimeConfig.MAX_DFS_STREAM_BUFFER_SIZE_PROP,
             HoodieRealtimeConfig.DEFAULT_MAX_DFS_STREAM_BUFFER_SIZE))

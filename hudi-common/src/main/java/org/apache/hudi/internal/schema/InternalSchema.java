@@ -71,6 +71,12 @@ public class InternalSchema implements Serializable {
     this(DEFAULT_VERSION_ID, Arrays.asList(columns));
   }
 
+  public InternalSchema(long versionId, Schema avroSchema) {
+    this(((Types.RecordType) AvroInternalSchemaConverter.convertToField(avroSchema)).fields());
+    this.versionId = versionId;
+    this.avroSchema = avroSchema;
+  }
+
   public InternalSchema(long versionId, List<Field> cols) {
     this.versionId = versionId;
     this.record = RecordType.get(cols);
