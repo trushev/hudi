@@ -70,7 +70,7 @@ public final class CastMap implements Serializable {
     DataType actualType = internalSchemaToDataType(tableName, actualSchema);
     CastMap castMap = new CastMap();
     InternalSchemaUtils.collectTypeChangedCols(querySchema, actualSchema).entrySet().stream()
-        .filter(e -> !isSameType(e.getValue().getLeft(), e.getValue().getRight()))
+        .filter(e -> !InternalSchemaUtils.isSameType(e.getValue().getLeft(), e.getValue().getRight()))
         .forEach(e -> {
           int pos = e.getKey();
           LogicalType target = queryType.getChildren().get(pos).getLogicalType();
@@ -210,13 +210,6 @@ public final class CastMap implements Serializable {
         valAsDecimal,
         ((DecimalType) decimalType).getPrecision(),
         ((DecimalType) decimalType).getScale());
-  }
-
-  private static boolean isSameType(Type left, Type right) {
-    if (left instanceof Types.DecimalType && right instanceof Types.DecimalType) {
-      return left.equals(right);
-    }
-    return left.typeId().equals(right.typeId());
   }
 
   private static DataType internalSchemaToDataType(String tableName, InternalSchema internalSchema) {
