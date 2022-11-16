@@ -19,6 +19,7 @@
 package org.apache.hudi.table.format.mor;
 
 import org.apache.hudi.common.model.HoodieRecord;
+import org.apache.hudi.internal.schema.InternalSchema;
 
 import org.apache.flink.table.types.logical.LogicalType;
 import org.apache.flink.table.types.logical.RowType;
@@ -38,6 +39,8 @@ public class MergeOnReadTableState implements Serializable {
   private final RowType requiredRowType;
   private final String avroSchema;
   private final String requiredAvroSchema;
+  private InternalSchema querySchema;
+  private InternalSchema actualSchema;
   private final List<MergeOnReadInputSplit> inputSplits;
   private final String[] pkFields;
   private final int operationPos;
@@ -53,6 +56,8 @@ public class MergeOnReadTableState implements Serializable {
     this.requiredRowType = requiredRowType;
     this.avroSchema = avroSchema;
     this.requiredAvroSchema = requiredAvroSchema;
+    this.querySchema = InternalSchema.getEmptyInternalSchema();
+    this.actualSchema = InternalSchema.getEmptyInternalSchema();
     this.inputSplits = inputSplits;
     this.pkFields = pkFields;
     this.operationPos = rowType.getFieldIndex(HoodieRecord.OPERATION_METADATA_FIELD);
@@ -80,6 +85,22 @@ public class MergeOnReadTableState implements Serializable {
 
   public int getOperationPos() {
     return operationPos;
+  }
+
+  public void setQuerySchema(InternalSchema querySchema) {
+    this.querySchema = querySchema;
+  }
+
+  public void setActualSchema(InternalSchema actualSchema) {
+    this.actualSchema = actualSchema;
+  }
+
+  public InternalSchema getQuerySchema() {
+    return querySchema;
+  }
+
+  public InternalSchema getActualSchema() {
+    return actualSchema;
   }
 
   public int[] getRequiredPositions() {

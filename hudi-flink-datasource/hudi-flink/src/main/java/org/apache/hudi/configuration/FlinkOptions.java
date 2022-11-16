@@ -21,6 +21,7 @@ package org.apache.hudi.configuration;
 import org.apache.hudi.client.clustering.plan.strategy.FlinkSizeBasedClusteringPlanStrategy;
 import org.apache.hudi.common.config.ConfigClassProperty;
 import org.apache.hudi.common.config.ConfigGroups;
+import org.apache.hudi.common.config.HoodieCommonConfig;
 import org.apache.hudi.common.config.HoodieConfig;
 import org.apache.hudi.common.model.EventTimeAvroPayload;
 import org.apache.hudi.common.model.HoodieCleaningPolicy;
@@ -119,6 +120,12 @@ public class FlinkOptions extends HoodieConfig {
       .defaultValue(DEFAULT_PARTITION_PATH) // keep sync with hoodie style
       .withDescription("The default partition name in case the dynamic partition"
           + " column value is null/empty string");
+
+  public static final ConfigOption<Boolean> SCHEMA_EVOLUTION_ENABLED = ConfigOptions
+      .key(HoodieCommonConfig.SCHEMA_EVOLUTION_ENABLE.key())
+      .booleanType()
+      .defaultValue(HoodieCommonConfig.SCHEMA_EVOLUTION_ENABLE.defaultValue())
+      .withDescription(HoodieCommonConfig.SCHEMA_EVOLUTION_ENABLE.doc());
 
   // ------------------------------------------------------------------------
   //  Changelog Capture Options

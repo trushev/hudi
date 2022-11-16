@@ -29,13 +29,17 @@ import org.apache.hudi.configuration.FlinkOptions;
 import org.apache.hudi.configuration.HadoopConfigurations;
 import org.apache.hudi.configuration.OptionsResolver;
 import org.apache.hudi.exception.HoodieException;
+import org.apache.hudi.internal.schema.InternalSchema;
 import org.apache.hudi.keygen.KeyGenUtils;
+import org.apache.hudi.table.format.CastMap;
 import org.apache.hudi.table.format.FilePathUtils;
+import org.apache.hudi.table.format.FlinkInternalSchemaManager;
 import org.apache.hudi.table.format.FormatUtils;
 import org.apache.hudi.table.format.cow.ParquetSplitReaderUtil;
 import org.apache.hudi.table.format.cow.vector.reader.ParquetColumnarRowSplitReader;
 import org.apache.hudi.util.AvroToRowDataConverters;
 import org.apache.hudi.util.DataTypeUtils;
+import org.apache.hudi.util.RowDataCastProjection;
 import org.apache.hudi.util.RowDataProjection;
 import org.apache.hudi.util.RowDataToAvroConverters;
 import org.apache.hudi.util.StreamerUtil;
@@ -99,12 +103,12 @@ public class MergeOnReadInputFormat
   /**
    * Full table names.
    */
-  private final List<String> fieldNames;
+  private List<String> fieldNames;
 
   /**
    * Full field data types.
    */
-  private final List<DataType> fieldTypes;
+  private List<DataType> fieldTypes;
 
   /**
    * Default partition name when the field value is null.
@@ -138,6 +142,8 @@ public class MergeOnReadInputFormat
    */
   private boolean closed = true;
 
+  private final Option<FlinkInternalSchemaManager> schemaManager;
+
   protected MergeOnReadInputFormat(
       Configuration conf,
       MergeOnReadTableState tableState,
@@ -155,6 +161,7 @@ public class MergeOnReadInputFormat
     this.requiredPos = tableState.getRequiredPositions();
     this.limit = limit;
     this.emitDelete = emitDelete;
+    this.schemaManager = FlinkInternalSchemaManager.of(conf);
   }
 
   /**
@@ -169,21 +176,25 @@ public class MergeOnReadInputFormat
     this.currentReadCount = 0L;
     this.closed = false;
     this.hadoopConf = HadoopConfigurations.getHadoopConf(this.conf);
+    if (schemaManager.isPresent()) {
+      setActualFields(split);
+    }
     this.iterator = initIterator(split);
     mayShiftInputSplit(split);
   }
 
   protected RecordIterator initIterator(MergeOnReadInputSplit split) throws IOException {
     if (!(split.getLogPaths().isPresent() && split.getLogPaths().get().size() > 0)) {
-      if (split.getInstantRange() != null) {
+      if (split.getInstantRange().isPresent()) {
         // base file only with commit time filtering
-        return new BaseFileOnlyFilteringIterator(
-            split.getInstantRange(),
-            this.tableState.getRequiredRowType(),
-            getReader(split.getBasePath().get(), getRequiredPosWithCommitTime(this.requiredPos)));
+        return new ProjectionIterator(
+            new BaseFileOnlyFilteringIterator(
+                split.getInstantRange().get(),
+                getReader(split.getBasePath().get(), getRequiredPosWithCommitTime(this.requiredPos))),
+            getProjection(IntStream.range(1, requiredPos.length + 1).toArray()));
       } else {
         // base file only
-        return new BaseFileOnlyIterator(getRequiredSchemaReader(split.getBasePath().get()));
+        return getBaseFileIterator(split);
       }
     } else if (!split.getBasePath().isPresent()) {
       // log files only
@@ -193,9 +204,7 @@ public class MergeOnReadInputFormat
         return new LogFileOnlyIterator(getLogFileIterator(split));
       }
     } else if (split.getMergeType().equals(FlinkOptions.REALTIME_SKIP_MERGE)) {
-      return new SkipMergeIterator(
-          getRequiredSchemaReader(split.getBasePath().get()),
-          getLogFileIterator(split));
+      return new SkipMergeIterator(getBaseFileIterator(split), getLogFileIterator(split));
     } else if (split.getMergeType().equals(FlinkOptions.REALTIME_PAYLOAD_COMBINE)) {
       return new MergeIterator(
           conf,
@@ -205,6 +214,9 @@ public class MergeOnReadInputFormat
           this.tableState.getRequiredRowType(),
           new Schema.Parser().parse(this.tableState.getAvroSchema()),
           new Schema.Parser().parse(this.tableState.getRequiredAvroSchema()),
+          this.tableState.getQuerySchema(),
+          getProjection(requiredPos),
+          getProjectionBeforeMerge(),
           this.requiredPos,
           this.emitDelete,
           this.tableState.getOperationPos(),
@@ -343,7 +355,7 @@ public class MergeOnReadInputFormat
     final GenericRecordBuilder recordBuilder = new GenericRecordBuilder(requiredSchema);
     final AvroToRowDataConverters.AvroToRowDataConverter avroToRowDataConverter =
         AvroToRowDataConverters.createRowConverter(tableState.getRequiredRowType());
-    final HoodieMergedLogRecordScanner scanner = FormatUtils.logScanner(split, tableSchema, conf, hadoopConf);
+    final HoodieMergedLogRecordScanner scanner = FormatUtils.logScanner(split, tableSchema, tableState.getQuerySchema(), conf, hadoopConf);
     final Iterator<String> logRecordsKeyIterator = scanner.getRecords().keySet().iterator();
     final int[] pkOffset = tableState.getPkOffsetsInRequired();
     // flag saying whether the pk semantics has been dropped by user specified
@@ -423,7 +435,7 @@ public class MergeOnReadInputFormat
     final GenericRecordBuilder recordBuilder = new GenericRecordBuilder(requiredSchema);
     final AvroToRowDataConverters.AvroToRowDataConverter avroToRowDataConverter =
         AvroToRowDataConverters.createRowConverter(tableState.getRequiredRowType());
-    final FormatUtils.BoundedMemoryRecords records = new FormatUtils.BoundedMemoryRecords(split, tableSchema, hadoopConf, conf);
+    final FormatUtils.BoundedMemoryRecords records = new FormatUtils.BoundedMemoryRecords(split, tableSchema, tableState.getQuerySchema(), hadoopConf, conf);
     final Iterator<HoodieRecord<?>> recordsIterator = records.getRecordsIterator();
 
     return new ClosableIterator<RowData>() {
@@ -470,7 +482,7 @@ public class MergeOnReadInputFormat
     final Schema tableSchema = new Schema.Parser().parse(tableState.getAvroSchema());
     final AvroToRowDataConverters.AvroToRowDataConverter avroToRowDataConverter =
         AvroToRowDataConverters.createRowConverter(tableState.getRowType());
-    final HoodieMergedLogRecordScanner scanner = FormatUtils.logScanner(split, tableSchema, conf, hadoopConf);
+    final HoodieMergedLogRecordScanner scanner = FormatUtils.logScanner(split, tableSchema, InternalSchema.getEmptyInternalSchema(), conf, hadoopConf);
     final Iterator<String> logRecordsKeyIterator = scanner.getRecords().keySet().iterator();
 
     return new ClosableIterator<RowData>() {
@@ -530,6 +542,31 @@ public class MergeOnReadInputFormat
     void close() throws IOException;
   }
 
+  private static final class ProjectionIterator implements RecordIterator {
+    private final RecordIterator iterator;
+    private final RowDataProjection projection;
+
+    public ProjectionIterator(RecordIterator iterator, RowDataProjection projection) {
+      this.iterator = iterator;
+      this.projection = projection;
+    }
+
+    @Override
+    public boolean reachedEnd() throws IOException {
+      return iterator.reachedEnd();
+    }
+
+    @Override
+    public RowData nextRecord() {
+      return projection.project(iterator.nextRecord());
+    }
+
+    @Override
+    public void close() throws IOException {
+      iterator.close();
+    }
+  }
+
   protected static class BaseFileOnlyIterator implements RecordIterator {
     // base file reader
     private final ParquetColumnarRowSplitReader reader;
@@ -563,30 +600,20 @@ public class MergeOnReadInputFormat
     // base file reader
     private final ParquetColumnarRowSplitReader reader;
     private final InstantRange instantRange;
-    private final RowDataProjection projection;
 
     private RowData currentRecord;
 
-    BaseFileOnlyFilteringIterator(
-        Option<InstantRange> instantRange,
-        RowType requiredRowType,
-        ParquetColumnarRowSplitReader reader) {
+    BaseFileOnlyFilteringIterator(InstantRange instantRange, ParquetColumnarRowSplitReader reader) {
+      this.instantRange = instantRange;
       this.reader = reader;
-      this.instantRange = instantRange.orElse(null);
-      int[] positions = IntStream.range(1, 1 + requiredRowType.getFieldCount()).toArray();
-      projection = RowDataProjection.instance(requiredRowType, positions);
     }
 
     @Override
     public boolean reachedEnd() throws IOException {
       while (!this.reader.reachedEnd()) {
         currentRecord = this.reader.nextRecord();
-        if (instantRange != null) {
-          boolean isInRange = instantRange.isInRange(currentRecord.getString(HOODIE_COMMIT_TIME_COL_POS).toString());
-          if (isInRange) {
-            return false;
-          }
-        } else {
+        boolean isInRange = instantRange.isInRange(currentRecord.getString(HOODIE_COMMIT_TIME_COL_POS).toString());
+        if (isInRange) {
           return false;
         }
       }
@@ -595,8 +622,7 @@ public class MergeOnReadInputFormat
 
     @Override
     public RowData nextRecord() {
-      // can promote: no need to project with null instant range
-      return projection.project(currentRecord);
+      return currentRecord;
     }
 
     @Override
@@ -635,7 +661,7 @@ public class MergeOnReadInputFormat
 
   static class SkipMergeIterator implements RecordIterator {
     // base file reader
-    private final ParquetColumnarRowSplitReader reader;
+    private final RecordIterator reader;
     // iterator for log files
     private final ClosableIterator<RowData> iterator;
 
@@ -646,7 +672,7 @@ public class MergeOnReadInputFormat
 
     private RowData currentRecord;
 
-    SkipMergeIterator(ParquetColumnarRowSplitReader reader, ClosableIterator<RowData> iterator) {
+    SkipMergeIterator(RecordIterator reader, ClosableIterator<RowData> iterator) {
       this.reader = reader;
       this.iterator = iterator;
     }
@@ -696,6 +722,7 @@ public class MergeOnReadInputFormat
     private final AvroToRowDataConverters.AvroToRowDataConverter avroToRowDataConverter;
 
     private final Option<RowDataProjection> projection;
+    private final Option<RowDataProjection> projectionBeforeMerge;
     private final Option<Function<IndexedRecord, GenericRecord>> avroProjection;
 
     private final InstantRange instantRange;
@@ -719,12 +746,17 @@ public class MergeOnReadInputFormat
         RowType requiredRowType,
         Schema tableSchema,
         Schema requiredSchema,
+        InternalSchema internalSchema,
+        RowDataProjection projection,
+        Option<RowDataProjection> projectionBeforeMerge,
         int[] requiredPos,
         boolean emitDelete,
         int operationPos,
         ParquetColumnarRowSplitReader reader) { // the reader should be with full schema
       this(flinkConf, hadoopConf, split, tableRowType, requiredRowType, tableSchema,
-          Option.of(RowDataProjection.instance(requiredRowType, requiredPos)),
+          internalSchema,
+          Option.of(projection),
+          projectionBeforeMerge,
           Option.of(record -> buildAvroRecordBySchema(record, requiredSchema, requiredPos, new GenericRecordBuilder(requiredSchema))),
           emitDelete, operationPos, reader);
     }
@@ -736,14 +768,16 @@ public class MergeOnReadInputFormat
         RowType tableRowType,
         RowType requiredRowType,
         Schema tableSchema,
+        InternalSchema internalSchema,
         Option<RowDataProjection> projection,
+        Option<RowDataProjection> projectionBeforeMerge,
         Option<Function<IndexedRecord, GenericRecord>> avroProjection,
         boolean emitDelete,
         int operationPos,
         ParquetColumnarRowSplitReader reader) { // the reader should be with full schema
       this.tableSchema = tableSchema;
       this.reader = reader;
-      this.scanner = FormatUtils.logScanner(split, tableSchema, flinkConf, hadoopConf);
+      this.scanner = FormatUtils.logScanner(split, tableSchema, internalSchema, flinkConf, hadoopConf);
       this.payloadProps = StreamerUtil.getPayloadConfig(flinkConf).getProps();
       this.logKeysIterator = scanner.getRecords().keySet().iterator();
       this.emitDelete = emitDelete;
@@ -752,6 +786,7 @@ public class MergeOnReadInputFormat
       this.rowDataToAvroConverter = RowDataToAvroConverters.createConverter(tableRowType);
       this.avroToRowDataConverter = AvroToRowDataConverters.createRowConverter(requiredRowType);
       this.projection = projection;
+      this.projectionBeforeMerge = projectionBeforeMerge;
       this.instantRange = split.getInstantRange().orElse(null);
     }
 
@@ -769,6 +804,9 @@ public class MergeOnReadInputFormat
         final String curKey = currentRecord.getString(HOODIE_RECORD_KEY_COL_POS).toString();
         if (scanner.getRecords().containsKey(curKey)) {
           keyToSkip.add(curKey);
+          if (projectionBeforeMerge.isPresent()) {
+            currentRecord = projectionBeforeMerge.get().project(currentRecord);
+          }
           Option<IndexedRecord> mergedAvroRecord = mergeRowWithLog(currentRecord, curKey);
           if (!mergedAvroRecord.isPresent()) {
             // deleted
@@ -906,5 +944,58 @@ public class MergeOnReadInputFormat
   @VisibleForTesting
   public void isEmitDelete(boolean emitDelete) {
     this.emitDelete = emitDelete;
+  }
+
+  private void setActualFields(MergeOnReadInputSplit split) {
+    FlinkInternalSchemaManager sm = schemaManager.get();
+    InternalSchema querySchema = sm.getQuerySchema();
+    InternalSchema actualSchema = sm.getActualSchema(split);
+    tableState.setQuerySchema(querySchema);
+    tableState.setActualSchema(actualSchema);
+    fieldNames = sm.getFieldNames(actualSchema);
+    fieldTypes = sm.getFieldTypes(actualSchema);
+  }
+
+  private RecordIterator getBaseFileIterator(MergeOnReadInputSplit split) throws IOException {
+    RecordIterator baseIterator = new BaseFileOnlyIterator(getRequiredSchemaReader(split.getBasePath().get()));
+    Option<RowDataProjection> castProjection = getCastProjection();
+    if (castProjection.isPresent()) {
+      return new ProjectionIterator(baseIterator, castProjection.get());
+    }
+    return baseIterator;
+  }
+
+  private Option<RowDataProjection> getProjectionBeforeMerge() {
+    if (schemaManager.isPresent()) {
+      int[] positions = IntStream.range(0, fieldTypes.size()).toArray();
+      return Option.of(new RowDataCastProjection(
+          schemaManager.get().project(fieldTypes, positions),
+          positions,
+          schemaManager.get().getCastMap(tableState.getQuerySchema(), tableState.getActualSchema())));
+    } else {
+      return Option.empty();
+    }
+  }
+
+  private RowDataProjection getProjection(int[] positions) {
+    return getCastProjection(positions)
+        .orElse(RowDataProjection.instance(tableState.getRequiredRowType(), positions));
+  }
+
+  private Option<RowDataProjection> getCastProjection() {
+    return getCastProjection(IntStream.range(0, requiredPos.length).toArray());
+  }
+
+  private Option<RowDataProjection> getCastProjection(int[] positions) {
+    if (schemaManager.isPresent()) {
+      CastMap castMap = schemaManager.get().getCastMap(tableState.getQuerySchema(), tableState.getActualSchema());
+      if (castMap.containsAnyPos(requiredPos)) {
+        return Option.of(new RowDataCastProjection(
+            schemaManager.get().project(fieldTypes, requiredPos),
+            positions,
+            castMap.withNewPositions(requiredPos, IntStream.range(0, requiredPos.length).toArray())));
+      }
+    }
+    return Option.empty();
   }
 }

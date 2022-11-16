@@ -20,8 +20,14 @@ package org.apache.hudi.table.format.cow;
 
 import java.util.Comparator;
 import org.apache.hudi.common.fs.FSUtils;
+import org.apache.hudi.common.util.Option;
+import org.apache.hudi.internal.schema.InternalSchema;
+import org.apache.hudi.table.format.CastMap;
+import org.apache.hudi.table.format.FlinkInternalSchemaManager;
 import org.apache.hudi.table.format.cow.vector.reader.ParquetColumnarRowSplitReader;
 import org.apache.hudi.util.DataTypeUtils;
+import org.apache.hudi.util.RowDataCastProjection;
+import org.apache.hudi.util.RowDataProjection;
 
 import org.apache.flink.api.common.io.FileInputFormat;
 import org.apache.flink.api.common.io.FilePathFilter;
@@ -47,6 +53,9 @@ import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Set;
+import java.util.stream.IntStream;
+
+import static org.apache.hudi.common.model.HoodieRecord.HOODIE_META_COLUMNS;
 
 /**
  * An implementation of {@link FileInputFormat} to read {@link RowData} records
@@ -66,8 +75,8 @@ public class CopyOnWriteInputFormat extends FileInputFormat<RowData> {
 
   private static final Logger LOG = LoggerFactory.getLogger(CopyOnWriteInputFormat.class);
 
-  private final String[] fullFieldNames;
-  private final DataType[] fullFieldTypes;
+  private String[] fullFieldNames;
+  private DataType[] fullFieldTypes;
   private final int[] selectedFields;
   private final String partDefaultName;
   private final boolean utcTimestamp;
@@ -82,6 +91,9 @@ public class CopyOnWriteInputFormat extends FileInputFormat<RowData> {
    */
   private FilePathFilter localFilesFilter = new GlobFilePathFilter();
 
+  private final Option<FlinkInternalSchemaManager> schemaManager;
+  private Option<RowDataProjection> projection;
+
   public CopyOnWriteInputFormat(
       Path[] paths,
       String[] fullFieldNames,
@@ -90,6 +102,7 @@ public class CopyOnWriteInputFormat extends FileInputFormat<RowData> {
       String partDefaultName,
       long limit,
       Configuration conf,
+      Option<FlinkInternalSchemaManager> schemaManager,
       boolean utcTimestamp) {
     super.setFilePaths(paths);
     this.limit = limit;
@@ -99,6 +112,8 @@ public class CopyOnWriteInputFormat extends FileInputFormat<RowData> {
     this.selectedFields = selectedFields;
     this.conf = new SerializableConfiguration(conf);
     this.utcTimestamp = utcTimestamp;
+    this.schemaManager = schemaManager;
+    this.projection = Option.empty();
   }
 
   @Override
@@ -122,6 +137,10 @@ public class CopyOnWriteInputFormat extends FileInputFormat<RowData> {
         partObjects.put(k, DataTypeUtils.resolvePartition(partDefaultName.equals(v) ? null : v, fieldType));
       }
     });
+
+    if (schemaManager.isPresent()) {
+      setActualFields(fileSplit);
+    }
 
     this.reader = ParquetSplitReaderUtil.genPartColumnarRowReader(
         utcTimestamp,
@@ -281,7 +300,10 @@ public class CopyOnWriteInputFormat extends FileInputFormat<RowData> {
   @Override
   public RowData nextRecord(RowData reuse) {
     currentReadCount++;
-    return reader.nextRecord();
+    RowData rowData = reader.nextRecord();
+    return projection.isPresent()
+        ? projection.get().project(rowData)
+        : rowData;
   }
 
   @Override
@@ -394,4 +416,22 @@ public class CopyOnWriteInputFormat extends FileInputFormat<RowData> {
     }
   }
 
+  private void setActualFields(FileInputSplit fileSplit) {
+    FlinkInternalSchemaManager sm = schemaManager.get();
+    InternalSchema actualSchema = sm.getActualSchema(fileSplit);
+    List<DataType> fieldTypes = sm.getFieldTypes(actualSchema);
+    CastMap castMap = sm.getCastMap(sm.getQuerySchema(), actualSchema);
+    int[] shiftedSelectedFields = Arrays.stream(selectedFields).map(pos -> pos + HOODIE_META_COLUMNS.size()).toArray();
+    if (castMap.containsAnyPos(shiftedSelectedFields)) {
+      int[] requiredFields = IntStream.range(0, shiftedSelectedFields.length).toArray();
+      projection = Option.of(new RowDataCastProjection(
+          sm.project(fieldTypes, shiftedSelectedFields),
+          requiredFields,
+          castMap.withNewPositions(shiftedSelectedFields, requiredFields)));
+    } else {
+      projection = Option.empty();
+    }
+    fullFieldNames = sm.getFieldNames(actualSchema).stream().skip(HOODIE_META_COLUMNS.size()).toArray(String[]::new);
+    fullFieldTypes = fieldTypes.stream().skip(HOODIE_META_COLUMNS.size()).toArray(DataType[]::new);
+  }
 }
