@@ -26,7 +26,7 @@ import org.apache.hudi.common.table.TableSchemaResolver;
 import org.apache.hudi.common.testutils.RawTripTestPayload;
 import org.apache.hudi.config.HoodieWriteConfig;
 import org.apache.hudi.internal.schema.Types;
-import org.apache.hudi.testutils.HoodieJavaClientTestBase;
+import org.apache.hudi.testutils.HoodieJavaClientTestHarness;
 
 import org.apache.avro.Schema;
 
@@ -43,19 +43,21 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 /**
  * Tests for schema evolution client api.
  */
-public class TestSchemaEvolutionClient extends HoodieJavaClientTestBase {
+public class TestSchemaEvolutionClient extends HoodieJavaClientTestHarness {
 
   private static final Schema SCHEMA = getSchemaFromResource(TestSchemaEvolutionClient.class, "/exampleSchema.avsc");
 
   @BeforeEach
   public void setUpClient() throws IOException {
+    initResources();
     HoodieJavaWriteClient<RawTripTestPayload> writeClient = getWriteClient();
     this.writeClient = writeClient;
     prepareTable(writeClient);
   }
 
   @AfterEach
-  public void closeClient() {
+  public void closeClient() throws IOException {
+    cleanupResources();
     if (writeClient != null) {
       writeClient.close();
     }
