@@ -28,7 +28,7 @@ import org.apache.hudi.internal.schema.Types;
 import org.apache.hudi.keygen.ComplexAvroKeyGenerator;
 import org.apache.hudi.keygen.constant.KeyGeneratorOptions;
 import org.apache.hudi.util.AvroSchemaConverter;
-import org.apache.hudi.util.StreamerUtil;
+import org.apache.hudi.util.FlinkWriteClients;
 import org.apache.hudi.utils.FlinkMiniCluster;
 
 import org.apache.avro.Schema;
@@ -139,7 +139,7 @@ public class ITTestSchemaEvolution {
         .withOption(FlinkOptions.TABLE_TYPE.key(), FlinkOptions.TABLE_TYPE_MERGE_ON_READ)
         .withOption(FlinkOptions.COMPACTION_DELTA_COMMITS.key(), 1);
     testSchemaEvolution(tableOptions);
-    try (HoodieFlinkWriteClient<?> writeClient = StreamerUtil.createWriteClient(tableOptions.toConfig())) {
+    try (HoodieFlinkWriteClient<?> writeClient = FlinkWriteClients.createWriteClient(tableOptions.toConfig())) {
       Option<String> compactionInstant = writeClient.scheduleCompaction(Option.empty());
       writeClient.compact(compactionInstant.get());
     }
@@ -222,7 +222,7 @@ public class ITTestSchemaEvolution {
   }
 
   private void changeTableSchema(TableOptions tableOptions, boolean shouldCompactBeforeSchemaChanges) throws IOException {
-    try (HoodieFlinkWriteClient<?> writeClient = StreamerUtil.createWriteClient(tableOptions.toConfig())) {
+    try (HoodieFlinkWriteClient<?> writeClient = FlinkWriteClients.createWriteClient(tableOptions.toConfig())) {
       if (shouldCompactBeforeSchemaChanges) {
         Option<String> compactionInstant = writeClient.scheduleCompaction(Option.empty());
         writeClient.compact(compactionInstant.get());
