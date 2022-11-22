@@ -209,7 +209,7 @@ public class InternalSchemaUtils {
     Set<Integer> otherIds = oldSchema.getAllIds();
     Map<Integer, Pair<Type, Type>> result = new HashMap<>();
     ids.stream().filter(f -> otherIds.contains(f)).forEach(f -> {
-      if (!isSameType(schema.findType(f), oldSchema.findType(f))) {
+      if (!schema.findType(f).equals(oldSchema.findType(f))) {
         String[] fieldNameParts = schema.findfullName(f).split("\\.");
         String[] otherFieldNameParts = oldSchema.findfullName(f).split("\\.");
         String parentName = fieldNameParts[0];
@@ -285,19 +285,5 @@ public class InternalSchemaUtils {
       int lastDotIndex = e.lastIndexOf(".");
       return e.substring(lastDotIndex == -1 ? 0 : lastDotIndex + 1);
     }));
-  }
-
-  /**
-   * Returns whether passed types are the same.
-   *
-   * @param t1 first type
-   * @param t2 second type
-   * @return true if types are the same
-   */
-  public static boolean isSameType(Type t1, Type t2) {
-    if (t1 instanceof Types.DecimalType && t2 instanceof Types.DecimalType) {
-      return t1.equals(t2);
-    }
-    return t1.typeId().equals(t2.typeId());
   }
 }

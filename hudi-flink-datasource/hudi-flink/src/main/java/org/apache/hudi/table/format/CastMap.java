@@ -75,14 +75,12 @@ public final class CastMap implements Serializable {
     DataType queryType = internalSchemaToDataType(tableName, querySchema);
     DataType actualType = internalSchemaToDataType(tableName, actualSchema);
     CastMap castMap = new CastMap();
-    InternalSchemaUtils.collectTypeChangedCols(querySchema, actualSchema).entrySet().stream()
-        .filter(e -> !InternalSchemaUtils.isSameType(e.getValue().getLeft(), e.getValue().getRight()))
-        .forEach(e -> {
-          int pos = e.getKey();
-          LogicalType target = queryType.getChildren().get(pos).getLogicalType();
-          LogicalType actual = actualType.getChildren().get(pos).getLogicalType();
-          castMap.add(pos, actual, target);
-        });
+    InternalSchemaUtils.collectTypeChangedCols(querySchema, actualSchema).forEach((key, value) -> {
+      int pos = key;
+      LogicalType target = queryType.getChildren().get(pos).getLogicalType();
+      LogicalType actual = actualType.getChildren().get(pos).getLogicalType();
+      castMap.add(pos, actual, target);
+    });
     return castMap;
   }
 

@@ -109,15 +109,15 @@ public class HoodieMergeHelper<T extends HoodieRecordPayload> extends
       List<String> colNamesFromQuerySchema = querySchema.getAllColsFullName();
       List<String> colNamesFromWriteSchema = writeInternalSchema.getAllColsFullName();
       List<String> sameCols = colNamesFromWriteSchema.stream()
-          .filter(f -> colNamesFromQuerySchema.contains(f)
-              && writeInternalSchema.findIdByName(f) == querySchema.findIdByName(f)
-              && writeInternalSchema.findIdByName(f) != -1
-              && writeInternalSchema.findType(writeInternalSchema.findIdByName(f)).equals(querySchema.findType(writeInternalSchema.findIdByName(f)))).collect(Collectors.toList());
+              .filter(f -> colNamesFromQuerySchema.contains(f)
+                      && writeInternalSchema.findIdByName(f) == querySchema.findIdByName(f)
+                      && writeInternalSchema.findIdByName(f) != -1
+                      && writeInternalSchema.findType(writeInternalSchema.findIdByName(f)).equals(querySchema.findType(writeInternalSchema.findIdByName(f)))).collect(Collectors.toList());
       readSchema = AvroInternalSchemaConverter
           .convert(new InternalSchemaMerger(writeInternalSchema, querySchema, true, false, false).mergeSchema(), readSchema.getName());
       Schema writeSchemaFromFile = AvroInternalSchemaConverter.convert(writeInternalSchema, readSchema.getName());
       needToReWriteRecord = sameCols.size() != colNamesFromWriteSchema.size()
-          || SchemaCompatibility.checkReaderWriterCompatibility(readSchema, writeSchemaFromFile).getType() == org.apache.avro.SchemaCompatibility.SchemaCompatibilityType.COMPATIBLE;
+              || SchemaCompatibility.checkReaderWriterCompatibility(readSchema, writeSchemaFromFile).getType() == org.apache.avro.SchemaCompatibility.SchemaCompatibilityType.COMPATIBLE;
       if (needToReWriteRecord) {
         renameCols = InternalSchemaUtils.collectRenameCols(writeInternalSchema, querySchema);
       }
