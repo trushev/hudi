@@ -40,7 +40,8 @@ public class HoodieUnMergedLogRecordScanner extends AbstractHoodieLogRecordReade
 
   private HoodieUnMergedLogRecordScanner(FileSystem fs, String basePath, List<String> logFilePaths, Schema readerSchema,
                                          String latestInstantTime, boolean readBlocksLazily, boolean reverseReader, int bufferSize,
-                                         LogRecordScannerCallback callback, Option<InstantRange> instantRange, InternalSchema internalSchema, boolean useScanV2) {
+                                         LogRecordScannerCallback callback, Option<InstantRange> instantRange, InternalSchema internalSchema,
+                                         boolean useScanV2) {
     super(fs, basePath, logFilePaths, readerSchema, latestInstantTime, readBlocksLazily, reverseReader, bufferSize, instantRange,
         false, true, Option.empty(), internalSchema, useScanV2);
     this.callback = callback;
@@ -113,6 +114,7 @@ public class HoodieUnMergedLogRecordScanner extends AbstractHoodieLogRecordReade
       return this;
     }
 
+    @Override
     public Builder withInternalSchema(InternalSchema internalSchema) {
       this.internalSchema = internalSchema;
       return this;
@@ -157,7 +159,8 @@ public class HoodieUnMergedLogRecordScanner extends AbstractHoodieLogRecordReade
     @Override
     public HoodieUnMergedLogRecordScanner build() {
       return new HoodieUnMergedLogRecordScanner(fs, basePath, logFilePaths, readerSchema,
-          latestInstantTime, readBlocksLazily, reverseReader, bufferSize, callback, instantRange, internalSchema, useScanV2);
+          latestInstantTime, readBlocksLazily, reverseReader, bufferSize, callback, instantRange,
+          internalSchema, useScanV2);
     }
   }
 }

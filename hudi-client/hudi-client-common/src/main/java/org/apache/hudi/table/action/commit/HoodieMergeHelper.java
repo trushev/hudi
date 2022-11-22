@@ -18,19 +18,6 @@
 
 package org.apache.hudi.table.action.commit;
 
-import org.apache.hudi.client.WriteStatus;
-import org.apache.hudi.common.data.HoodieData;
-import org.apache.hudi.common.model.HoodieBaseFile;
-import org.apache.hudi.common.model.HoodieKey;
-import org.apache.hudi.common.model.HoodieRecord;
-import org.apache.hudi.common.model.HoodieRecordPayload;
-import org.apache.hudi.common.util.queue.BoundedInMemoryExecutor;
-import org.apache.hudi.exception.HoodieException;
-import org.apache.hudi.io.HoodieMergeHandle;
-import org.apache.hudi.io.storage.HoodieFileReader;
-import org.apache.hudi.io.storage.HoodieFileReaderFactory;
-import org.apache.hudi.table.HoodieTable;
-
 import org.apache.avro.Schema;
 import org.apache.avro.generic.GenericDatumReader;
 import org.apache.avro.generic.GenericDatumWriter;
@@ -38,6 +25,19 @@ import org.apache.avro.generic.GenericRecord;
 import org.apache.avro.io.BinaryDecoder;
 import org.apache.avro.io.BinaryEncoder;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hudi.client.WriteStatus;
+import org.apache.hudi.common.data.HoodieData;
+import org.apache.hudi.common.model.HoodieBaseFile;
+import org.apache.hudi.common.model.HoodieKey;
+import org.apache.hudi.common.model.HoodieRecord;
+import org.apache.hudi.common.model.HoodieRecordPayload;
+import org.apache.hudi.common.util.queue.HoodieExecutor;
+import org.apache.hudi.exception.HoodieException;
+import org.apache.hudi.io.HoodieMergeHandle;
+import org.apache.hudi.io.storage.HoodieFileReader;
+import org.apache.hudi.io.storage.HoodieFileReaderFactory;
+import org.apache.hudi.table.HoodieTable;
+import org.apache.hudi.util.QueueBasedExecutorFactory;
 
 import java.io.IOException;
 import java.util.Iterator;
@@ -76,7 +76,7 @@ public class HoodieMergeHelper<T extends HoodieRecordPayload> extends
       readSchema = mergeHandle.getWriterSchemaWithMetaFields();
     }
 
-    BoundedInMemoryExecutor<GenericRecord, GenericRecord, Void> wrapper = null;
+    HoodieExecutor<GenericRecord, GenericRecord, Void> wrapper = null;
     HoodieFileReader<GenericRecord> reader = HoodieFileReaderFactory.getFileReader(cfgForHoodieFile, mergeHandle.getOldFilePath());
 
     try {
@@ -89,13 +89,14 @@ public class HoodieMergeHelper<T extends HoodieRecordPayload> extends
 
       ThreadLocal<BinaryEncoder> encoderCache = new ThreadLocal<>();
       ThreadLocal<BinaryDecoder> decoderCache = new ThreadLocal<>();
-      wrapper = new BoundedInMemoryExecutor(table.getConfig().getWriteBufferLimitBytes(), readerIterator,
-          new UpdateHandler(mergeHandle), record -> {
+
+      wrapper = QueueBasedExecutorFactory.create(table.getConfig(), readerIterator, new UpdateHandler(mergeHandle), record -> {
         if (!externalSchemaTransformation) {
           return record;
         }
-        return transformRecordBasedOnNewSchema(gReader, gWriter, encoderCache, decoderCache, (GenericRecord) record);
+        return transformRecordBasedOnNewSchema(gReader, gWriter, encoderCache, decoderCache, record);
       }, table.getPreExecuteRunnable());
+      
       wrapper.execute();
     } catch (Exception e) {
       throw new HoodieException(e);

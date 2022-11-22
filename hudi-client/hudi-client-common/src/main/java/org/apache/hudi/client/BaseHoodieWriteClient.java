@@ -1762,14 +1762,13 @@ public abstract class BaseHoodieWriteClient<T extends HoodieRecordPayload, I, K,
   private Pair<InternalSchema, HoodieTableMetaClient> getInternalSchemaAndMetaClient() {
     HoodieTableMetaClient metaClient = createMetaClient(true);
     TableSchemaResolver schemaUtil = new TableSchemaResolver(metaClient);
-    InternalSchema internalSchema = getInternalSchema(schemaUtil);
-    return Pair.of(internalSchema, metaClient);
+    return Pair.of(getInternalSchema(schemaUtil), metaClient);
   }
 
   private void commitTableChange(InternalSchema newSchema, HoodieTableMetaClient metaClient) {
     TableSchemaResolver schemaUtil = new TableSchemaResolver(metaClient);
-    InternalSchema oldSchema = getInternalSchema(schemaUtil);
-    String historySchemaStr = schemaUtil.getTableHistorySchemaStrFromCommitMetadata().orElse(SerDeHelper.inheritSchemas(oldSchema, ""));
+    String historySchemaStr = schemaUtil.getTableHistorySchemaStrFromCommitMetadata().orElseGet(
+        () -> SerDeHelper.inheritSchemas(getInternalSchema(schemaUtil), ""));
     Schema schema = AvroInternalSchemaConverter.convert(newSchema, config.getTableName());
     String commitActionType = CommitUtils.getCommitActionType(WriteOperationType.ALTER_SCHEMA, metaClient.getTableType());
     String instantTime = HoodieActiveTimeline.createNewInstantTime();
