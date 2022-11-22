@@ -22,6 +22,7 @@ import java.util.Comparator;
 import org.apache.hudi.common.fs.FSUtils;
 import org.apache.hudi.common.util.Option;
 import org.apache.hudi.internal.schema.InternalSchema;
+import org.apache.hudi.internal.schema.utils.InternalSchemaUtils;
 import org.apache.hudi.table.format.CastMap;
 import org.apache.hudi.table.format.FlinkInternalSchemaManager;
 import org.apache.hudi.table.format.cow.vector.reader.ParquetColumnarRowSplitReader;
@@ -52,7 +53,9 @@ import java.util.Arrays;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
 import static org.apache.hudi.common.model.HoodieRecord.HOODIE_META_COLUMNS;
@@ -94,6 +97,8 @@ public class CopyOnWriteInputFormat extends FileInputFormat<RowData> {
   private final Option<FlinkInternalSchemaManager> schemaManager;
   private Option<RowDataProjection> projection;
 
+  private final String[] fullFieldNamesOrigin;
+
   public CopyOnWriteInputFormat(
       Path[] paths,
       String[] fullFieldNames,
@@ -114,6 +119,7 @@ public class CopyOnWriteInputFormat extends FileInputFormat<RowData> {
     this.utcTimestamp = utcTimestamp;
     this.schemaManager = schemaManager;
     this.projection = Option.empty();
+    this.fullFieldNamesOrigin = fullFieldNames;
   }
 
   @Override
@@ -420,8 +426,34 @@ public class CopyOnWriteInputFormat extends FileInputFormat<RowData> {
     FlinkInternalSchemaManager sm = schemaManager.get();
     InternalSchema actualSchema = sm.getActualSchema(fileSplit);
     List<DataType> fieldTypes = sm.getFieldTypes(actualSchema);
+    List<String> fieldNames = sm.getFieldNames(actualSchema);
+
+    Map<String, String> renameCols = InternalSchemaUtils.collectRenameCols(schemaManager.get().getQuerySchema(), actualSchema);
+    ArrayList<String> tmpNames = new ArrayList<>();
+    ArrayList<DataType> tmpTypes = new ArrayList<>();
+    List<String> strings = Arrays.asList(fullFieldNamesOrigin);
+    for (int i = 0; i < fieldNames.size(); i++) {
+      String fieldName = fieldNames.get(i);
+      if (strings.contains(fieldName) || renameCols.containsKey(fieldName)) {
+        tmpNames.add(fieldName);
+        tmpTypes.add(fieldTypes.get(i));
+      }
+    }
+    fullFieldNames = tmpNames.toArray(new String[0]);
+    fullFieldTypes = tmpTypes.toArray(new DataType[0]);
+
     CastMap castMap = sm.getCastMap(sm.getQuerySchema(), actualSchema);
-    int[] shiftedSelectedFields = Arrays.stream(selectedFields).map(pos -> pos + HOODIE_META_COLUMNS.size()).toArray();
+
+    List<String> newFieldNames = sm.getFieldNames(schemaManager.get().getQuerySchema());
+    int[] shiftedSelectedFields = new int[selectedFields.length];
+    for (int i = 0; i < selectedFields.length; i++) {
+      String name = fullFieldNamesOrigin[selectedFields[i]];
+      int i1 = fieldNames.indexOf(name);
+      if (i1 == -1) {
+        i1 = newFieldNames.indexOf(name);
+      }
+      shiftedSelectedFields[i] = i1;
+    }
     if (castMap.containsAnyPos(shiftedSelectedFields)) {
       int[] requiredFields = IntStream.range(0, shiftedSelectedFields.length).toArray();
       projection = Option.of(new RowDataCastProjection(
@@ -431,7 +463,5 @@ public class CopyOnWriteInputFormat extends FileInputFormat<RowData> {
     } else {
       projection = Option.empty();
     }
-    fullFieldNames = sm.getFieldNames(actualSchema).stream().skip(HOODIE_META_COLUMNS.size()).toArray(String[]::new);
-    fullFieldTypes = fieldTypes.stream().skip(HOODIE_META_COLUMNS.size()).toArray(DataType[]::new);
   }
 }

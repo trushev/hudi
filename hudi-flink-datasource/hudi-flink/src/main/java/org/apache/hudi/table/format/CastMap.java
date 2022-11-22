@@ -100,14 +100,13 @@ public final class CastMap implements Serializable {
 
   public CastMap withNewPositions(int[] oldPositions, int[] newPositions) {
     Preconditions.checkArgument(oldPositions.length == newPositions.length);
-    CastMap newCastMap = new CastMap();
     for (int i = 0; i < oldPositions.length; i++) {
-      Cast cast = castMap.get(oldPositions[i]);
+      Cast cast = castMap.remove(oldPositions[i]);
       if (cast != null) {
-        newCastMap.add(newPositions[i], cast);
+        castMap.put(newPositions[i], cast);
       }
     }
-    return newCastMap;
+    return this;
   }
 
   @VisibleForTesting
