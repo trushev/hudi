@@ -39,6 +39,13 @@ public class AvroSchemaUtils {
   /**
    * See {@link #isSchemaCompatible(Schema, Schema, boolean, boolean)} doc for more details
    */
+  public static boolean isSchemaCompatible(Schema prevSchema, Schema newSchema) {
+    return isSchemaCompatible(prevSchema, newSchema, true);
+  }
+
+  /**
+   * See {@link #isSchemaCompatible(Schema, Schema, boolean, boolean)} doc for more details
+   */
   public static boolean isSchemaCompatible(Schema prevSchema, Schema newSchema, boolean allowProjection) {
     return isSchemaCompatible(prevSchema, newSchema, true, allowProjection);
   }

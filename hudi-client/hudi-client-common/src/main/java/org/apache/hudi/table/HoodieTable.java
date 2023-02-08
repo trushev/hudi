@@ -18,6 +18,7 @@
 
 package org.apache.hudi.table;
 
+import org.apache.hudi.avro.AvroSchemaUtils;
 import org.apache.hudi.avro.HoodieAvroUtils;
 import org.apache.hudi.avro.model.HoodieCleanMetadata;
 import org.apache.hudi.avro.model.HoodieCleanerPlan;
@@ -70,6 +71,7 @@ import org.apache.hudi.exception.HoodieIOException;
 import org.apache.hudi.exception.HoodieInsertException;
 import org.apache.hudi.exception.HoodieMetadataException;
 import org.apache.hudi.exception.HoodieUpsertException;
+import org.apache.hudi.exception.SchemaCompatibilityException;
 import org.apache.hudi.index.HoodieIndex;
 import org.apache.hudi.metadata.HoodieTableMetadata;
 import org.apache.hudi.metadata.HoodieTableMetadataWriter;
@@ -105,6 +107,8 @@ import static org.apache.hudi.common.model.HoodieFailedWritesCleaningPolicy.EAGE
 import static org.apache.hudi.common.model.HoodieFailedWritesCleaningPolicy.LAZY;
 import static org.apache.hudi.common.table.HoodieTableConfig.TABLE_METADATA_PARTITIONS;
 import static org.apache.hudi.common.util.StringUtils.EMPTY_STRING;
+import static org.apache.hudi.config.HoodieWriteConfig.AVRO_SCHEMA_VALIDATE_ENABLE;
+import static org.apache.hudi.config.HoodieWriteConfig.SCHEMA_ALLOW_AUTO_EVOLUTION_COLUMN_DROP;
 import static org.apache.hudi.metadata.HoodieTableMetadataUtil.deleteMetadataPartition;
 import static org.apache.hudi.metadata.HoodieTableMetadataUtil.deleteMetadataTable;
 import static org.apache.hudi.metadata.HoodieTableMetadataUtil.metadataPartitionExists;
@@ -802,27 +806,38 @@ public abstract class HoodieTable<T, I, K, O> implements Serializable {
    * GenericRecords with writerSchema. Hence, we need to ensure that this conversion can take place without errors.
    */
   private void validateSchema() throws HoodieUpsertException, HoodieInsertException {
-
-    if (!shouldValidateAvroSchema() || getActiveTimeline().getCommitsTimeline().filterCompletedInstants().empty()) {
+    boolean allowProjection = config.shouldAllowAutoEvolutionColumnDrop();
+    boolean shouldValidate = shouldValidateAvroSchema();
+    if ((allowProjection && !shouldValidate)
+        || getActiveTimeline().getCommitsTimeline().filterCompletedInstants().empty()) {
       // Check not required
       return;
     }
 
     Schema tableSchema;
     Schema writerSchema;
-    boolean isValid;
+    String errorMessage = null;
     try {
       TableSchemaResolver schemaResolver = new TableSchemaResolver(getMetaClient());
       writerSchema = HoodieAvroUtils.createHoodieWriteSchema(config.getSchema());
-      tableSchema = HoodieAvroUtils.createHoodieWriteSchema(schemaResolver.getTableAvroSchemaWithoutMetadataFields());
-      isValid = isSchemaCompatible(tableSchema, writerSchema, config.shouldAllowAutoEvolutionColumnDrop());
+      tableSchema = HoodieAvroUtils.createHoodieWriteSchema(schemaResolver.getTableAvroSchema(false));
+      if (!allowProjection && !AvroSchemaUtils.canProject(tableSchema, writerSchema)) {
+        errorMessage = String.format("Column dropping is not allowed. Use %s to disable this check", SCHEMA_ALLOW_AUTO_EVOLUTION_COLUMN_DROP.key());
+      } else if (shouldValidate && !isSchemaCompatible(tableSchema, writerSchema)) {
+        errorMessage = String.format("Failed schema compatibility check. Use %s to disable this check.", AVRO_SCHEMA_VALIDATE_ENABLE.key());
+      }
     } catch (Exception e) {
-      throw new HoodieException("Failed to read schema/check compatibility for base path " + metaClient.getBasePath(), e);
+      throw new HoodieException("Failed to read schema/check compatibility for base path " + metaClient.getBasePathV2(), e);
     }
 
-    if (!isValid) {
-      throw new HoodieException("Failed schema compatibility check for writerSchema :" + writerSchema
-          + ", table schema :" + tableSchema + ", base path :" + metaClient.getBasePath());
+    if (errorMessage != null) {
+      String errorDetails = String.format(
+          "writerSchema: %s\ntableSchema: %s\nbasePath: %s",
+          writerSchema,
+          tableSchema,
+          metaClient.getBasePathV2()
+      );
+      throw new SchemaCompatibilityException(errorMessage + "\n" + errorDetails);
     }
   }
 
