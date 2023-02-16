@@ -73,6 +73,9 @@ import org.apache.hudi.exception.HoodieMetadataException;
 import org.apache.hudi.exception.HoodieUpsertException;
 import org.apache.hudi.exception.SchemaCompatibilityException;
 import org.apache.hudi.index.HoodieIndex;
+import org.apache.hudi.keygen.BaseKeyGenerator;
+import org.apache.hudi.keygen.KeyGenerator;
+import org.apache.hudi.keygen.factory.HoodieAvroKeyGeneratorFactory;
 import org.apache.hudi.metadata.HoodieTableMetadata;
 import org.apache.hudi.metadata.HoodieTableMetadataWriter;
 import org.apache.hudi.metadata.MetadataPartitionType;
@@ -94,6 +97,8 @@ import org.apache.log4j.Logger;
 import java.io.IOException;
 import java.io.Serializable;
 import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -806,9 +811,7 @@ public abstract class HoodieTable<T, I, K, O> implements Serializable {
    * GenericRecords with writerSchema. Hence, we need to ensure that this conversion can take place without errors.
    */
   private void validateSchema() throws HoodieUpsertException, HoodieInsertException {
-    boolean allowProjection = config.shouldAllowAutoEvolutionColumnDrop();
-    boolean shouldValidate = shouldValidateAvroSchema();
-    if ((allowProjection && !shouldValidate)
+    if ((!config.shouldValidateAvroSchema() && config.shouldAllowAutoEvolutionColumnDrop())
         || getActiveTimeline().getCommitsTimeline().filterCompletedInstants().empty()) {
       // Check not required
       return;
@@ -816,21 +819,17 @@ public abstract class HoodieTable<T, I, K, O> implements Serializable {
 
     Schema tableSchema;
     Schema writerSchema;
-    String errorMessage = null;
+    Option<String> errorMessage;
     try {
       TableSchemaResolver schemaResolver = new TableSchemaResolver(getMetaClient());
       writerSchema = HoodieAvroUtils.createHoodieWriteSchema(config.getSchema());
       tableSchema = HoodieAvroUtils.createHoodieWriteSchema(schemaResolver.getTableAvroSchema(false));
-      if (!allowProjection && !AvroSchemaUtils.canProject(tableSchema, writerSchema)) {
-        errorMessage = String.format("Column dropping is not allowed. Use %s to disable this check", SCHEMA_ALLOW_AUTO_EVOLUTION_COLUMN_DROP.key());
-      } else if (shouldValidate && !isSchemaCompatible(tableSchema, writerSchema)) {
-        errorMessage = String.format("Failed schema compatibility check. Use %s to disable this check.", AVRO_SCHEMA_VALIDATE_ENABLE.key());
-      }
+      errorMessage = validateInternal(tableSchema, writerSchema);
     } catch (Exception e) {
       throw new HoodieException("Failed to read schema/check compatibility for base path " + metaClient.getBasePathV2(), e);
     }
 
-    if (errorMessage != null) {
+    if (errorMessage.isPresent()) {
       String errorDetails = String.format(
           "writerSchema: %s\ntableSchema: %s\nbasePath: %s",
           writerSchema,
@@ -838,6 +837,49 @@ public abstract class HoodieTable<T, I, K, O> implements Serializable {
           metaClient.getBasePathV2()
       );
       throw new SchemaCompatibilityException(errorMessage + "\n" + errorDetails);
+    }
+  }
+
+  Option<String> validateInternal(Schema tableSchema, Schema writerSchema) {
+    boolean shouldValidate = config.shouldValidateAvroSchema();
+    boolean dropPartitionCols = metaClient.getTableConfig().shouldDropPartitionColumns();
+    boolean allowProjection = config.shouldAllowAutoEvolutionColumnDrop();
+
+    if (!allowProjection) {
+      if ((!dropPartitionCols && !AvroSchemaUtils.canProject(tableSchema, writerSchema))
+          || (dropPartitionCols && !AvroSchemaUtils.canProject(tableSchema, writerSchema, getPartColsNames()))) {
+        return Option.of(String.format(
+            "Column dropping is not allowed. Use %s to disable this check",
+            SCHEMA_ALLOW_AUTO_EVOLUTION_COLUMN_DROP.key()
+        ));
+      }
+    }
+
+    // TODO(HUDI-4772) re-enable validations in case partition columns
+    //                 being dropped from the data-file after fixing the write schema
+    if (!dropPartitionCols && shouldValidate && !isSchemaCompatible(tableSchema, writerSchema)) {
+      return Option.of(String.format(
+          "Failed schema compatibility check. Use %s to disable this check",
+          AVRO_SCHEMA_VALIDATE_ENABLE.key()
+      ));
+    }
+    return Option.empty();
+  }
+
+  private Collection<String> getPartColsNames() {
+    //    String partitionPath = config.getString(KeyGeneratorOptions.PARTITIONPATH_FIELD_NAME.key());
+
+    KeyGenerator keyGenerator;
+    try {
+      keyGenerator = HoodieAvroKeyGeneratorFactory.createKeyGenerator(config.getProps());
+    } catch (IOException e) {
+      LOG.error("Failed keyGenerator creation", e);
+      keyGenerator = null;
+    }
+    if (keyGenerator instanceof BaseKeyGenerator) {
+      return ((BaseKeyGenerator) keyGenerator).getPartitionPathFields();
+    } else {
+      return Collections.emptyList();
     }
   }
 

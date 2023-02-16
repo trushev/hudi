@@ -22,6 +22,7 @@ import org.apache.avro.AvroRuntimeException;
 import org.apache.avro.Schema;
 import org.apache.avro.SchemaCompatibility;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Objects;
 import java.util.function.BiFunction;
@@ -84,6 +85,13 @@ public class AvroSchemaUtils {
    */
   public static boolean canProject(Schema prevSchema, Schema newSchema) {
     return prevSchema.getFields().stream()
+        .map(oldSchemaField -> SchemaCompatibility.lookupWriterField(newSchema, oldSchemaField))
+        .noneMatch(Objects::isNull);
+  }
+
+  public static boolean canProject(Schema prevSchema, Schema newSchema, Collection<String> partCols) {
+    return prevSchema.getFields().stream()
+        .filter(f -> !partCols.contains(f.name()))
         .map(oldSchemaField -> SchemaCompatibility.lookupWriterField(newSchema, oldSchemaField))
         .noneMatch(Objects::isNull);
   }
