@@ -23,6 +23,7 @@ import org.apache.avro.Schema;
 import org.apache.avro.SchemaCompatibility;
 
 import java.util.Collection;
+import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
 import java.util.function.BiFunction;
@@ -84,14 +85,18 @@ public class AvroSchemaUtils {
    * @return true if prev schema is a projection of new schema.
    */
   public static boolean canProject(Schema prevSchema, Schema newSchema) {
-    return prevSchema.getFields().stream()
-        .map(oldSchemaField -> SchemaCompatibility.lookupWriterField(newSchema, oldSchemaField))
-        .noneMatch(Objects::isNull);
+    return canProject(prevSchema, newSchema, Collections.emptySet());
   }
 
-  public static boolean canProject(Schema prevSchema, Schema newSchema, Collection<String> partCols) {
+  /**
+   * Check that each field in the prevSchema can be populated in the newSchema except specified columns
+   * @param prevSchema prev schema.
+   * @param newSchema new schema
+   * @return true if prev schema is a projection of new schema.
+   */
+  public static boolean canProject(Schema prevSchema, Schema newSchema, Collection<String> exceptCols) {
     return prevSchema.getFields().stream()
-        .filter(f -> !partCols.contains(f.name()))
+        .filter(f -> !exceptCols.contains(f.name()))
         .map(oldSchemaField -> SchemaCompatibility.lookupWriterField(newSchema, oldSchemaField))
         .noneMatch(Objects::isNull);
   }

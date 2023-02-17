@@ -99,6 +99,7 @@ import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -811,6 +812,7 @@ public abstract class HoodieTable<T, I, K, O> implements Serializable {
    * GenericRecords with writerSchema. Hence, we need to ensure that this conversion can take place without errors.
    */
   private void validateSchema() throws HoodieUpsertException, HoodieInsertException {
+
     if ((!config.shouldValidateAvroSchema() && config.shouldAllowAutoEvolutionColumnDrop())
         || getActiveTimeline().getCommitsTimeline().filterCompletedInstants().empty()) {
       // Check not required
@@ -824,30 +826,31 @@ public abstract class HoodieTable<T, I, K, O> implements Serializable {
       TableSchemaResolver schemaResolver = new TableSchemaResolver(getMetaClient());
       writerSchema = HoodieAvroUtils.createHoodieWriteSchema(config.getSchema());
       tableSchema = HoodieAvroUtils.createHoodieWriteSchema(schemaResolver.getTableAvroSchema(false));
-      errorMessage = validateInternal(tableSchema, writerSchema);
+      errorMessage = checkAvroSchema(tableSchema, writerSchema);
     } catch (Exception e) {
       throw new HoodieException("Failed to read schema/check compatibility for base path " + metaClient.getBasePathV2(), e);
     }
 
     if (errorMessage.isPresent()) {
       String errorDetails = String.format(
-          "writerSchema: %s\ntableSchema: %s\nbasePath: %s",
+          "%s\nwriterSchema: %s\ntableSchema: %s\nbasePath: %s",
+          errorMessage.get(),
           writerSchema,
           tableSchema,
           metaClient.getBasePathV2()
       );
-      throw new SchemaCompatibilityException(errorMessage + "\n" + errorDetails);
+      throw new SchemaCompatibilityException(errorDetails);
     }
   }
 
-  Option<String> validateInternal(Schema tableSchema, Schema writerSchema) {
+  private Option<String> checkAvroSchema(Schema tableSchema, Schema writerSchema) {
     boolean shouldValidate = config.shouldValidateAvroSchema();
     boolean dropPartitionCols = metaClient.getTableConfig().shouldDropPartitionColumns();
     boolean allowProjection = config.shouldAllowAutoEvolutionColumnDrop();
 
     if (!allowProjection) {
-      if ((!dropPartitionCols && !AvroSchemaUtils.canProject(tableSchema, writerSchema))
-          || (dropPartitionCols && !AvroSchemaUtils.canProject(tableSchema, writerSchema, getPartColsNames()))) {
+      if ((dropPartitionCols && !AvroSchemaUtils.canProject(tableSchema, writerSchema, getPartitionColsNames()))
+          || (!dropPartitionCols && !AvroSchemaUtils.canProject(tableSchema, writerSchema))) {
         return Option.of(String.format(
             "Column dropping is not allowed. Use %s to disable this check",
             SCHEMA_ALLOW_AUTO_EVOLUTION_COLUMN_DROP.key()
@@ -864,23 +867,6 @@ public abstract class HoodieTable<T, I, K, O> implements Serializable {
       ));
     }
     return Option.empty();
-  }
-
-  private Collection<String> getPartColsNames() {
-    //    String partitionPath = config.getString(KeyGeneratorOptions.PARTITIONPATH_FIELD_NAME.key());
-
-    KeyGenerator keyGenerator;
-    try {
-      keyGenerator = HoodieAvroKeyGeneratorFactory.createKeyGenerator(config.getProps());
-    } catch (IOException e) {
-      LOG.error("Failed keyGenerator creation", e);
-      keyGenerator = null;
-    }
-    if (keyGenerator instanceof BaseKeyGenerator) {
-      return ((BaseKeyGenerator) keyGenerator).getPartitionPathFields();
-    } else {
-      return Collections.emptyList();
-    }
   }
 
   public void validateUpsertSchema() throws HoodieUpsertException {
@@ -1098,11 +1084,18 @@ public abstract class HoodieTable<T, I, K, O> implements Serializable {
     return Functions.noop();
   }
 
-  private boolean shouldValidateAvroSchema() {
-    // TODO(HUDI-4772) re-enable validations in case partition columns
-    //                 being dropped from the data-file after fixing the write schema
-    Boolean shouldDropPartitionColumns = metaClient.getTableConfig().shouldDropPartitionColumns();
-
-    return config.shouldValidateAvroSchema() && !shouldDropPartitionColumns;
+  private Collection<String> getPartitionColsNames() {
+    KeyGenerator keyGenerator;
+    try {
+      keyGenerator = HoodieAvroKeyGeneratorFactory.createKeyGenerator(config.getProps());
+    } catch (IOException e) {
+      LOG.error("Failed keyGenerator creation", e);
+      keyGenerator = null;
+    }
+    if (keyGenerator instanceof BaseKeyGenerator) {
+      return new HashSet<>(((BaseKeyGenerator) keyGenerator).getPartitionPathFields());
+    } else {
+      return Collections.emptySet();
+    }
   }
 }
